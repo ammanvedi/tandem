@@ -71,6 +71,15 @@ resource "cloudflare_worker" "this" {
 # 2. Create a Worker Version with modules and bindings
 # =============================================================================
 
+# Tracks the script content hash so that cloudflare_worker_version is replaced
+# whenever the bundle changes. Without this, Terraform only compares the file
+# *path* (which never changes) and silently skips deploying new code.
+resource "terraform_data" "script_hash" {
+  count = var.script_hash != null ? 1 : 0
+
+  input = var.script_hash
+}
+
 resource "cloudflare_worker_version" "this" {
   account_id          = var.account_id
   worker_id           = cloudflare_worker.this.id
@@ -100,6 +109,10 @@ resource "cloudflare_worker_version" "this" {
     new_tag            = var.migration_tag
     new_sqlite_classes = length(var.new_sqlite_classes) > 0 ? var.new_sqlite_classes : [for do in var.durable_objects : do.class_name]
   } : null
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.script_hash]
+  }
 }
 
 # =============================================================================

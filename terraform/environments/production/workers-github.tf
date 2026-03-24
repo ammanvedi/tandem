@@ -23,6 +23,7 @@ module "github_bot_worker" {
   account_id  = var.cloudflare_account_id
   worker_name = "open-inspect-github-bot-${local.name_suffix}"
   script_path = local.github_bot_script_path
+  script_hash = filesha256(local.github_bot_script_path)
 
   kv_namespaces = [
     {

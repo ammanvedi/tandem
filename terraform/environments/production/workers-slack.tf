@@ -25,6 +25,7 @@ module "slack_bot_worker" {
   account_id  = var.cloudflare_account_id
   worker_name = "open-inspect-slack-bot-${local.name_suffix}"
   script_path = local.slack_bot_script_path
+  script_hash = filesha256(local.slack_bot_script_path)
 
   kv_namespaces = [
     {

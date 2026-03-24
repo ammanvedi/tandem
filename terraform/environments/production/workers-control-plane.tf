@@ -22,6 +22,7 @@ module "control_plane_worker" {
   account_id  = var.cloudflare_account_id
   worker_name = "open-inspect-control-plane-${local.name_suffix}"
   script_path = local.control_plane_script_path
+  script_hash = filesha256(local.control_plane_script_path)
 
   kv_namespaces = [
     {

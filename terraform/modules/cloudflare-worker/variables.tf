@@ -19,6 +19,12 @@ variable "script_path" {
   type        = string
 }
 
+variable "script_hash" {
+  description = "Hash of the script content (e.g. filesha256). When set, a change forces worker version replacement so Terraform deploys new code automatically."
+  type        = string
+  default     = null
+}
+
 variable "kv_namespaces" {
   description = "List of KV namespace bindings"
   type = list(object({
