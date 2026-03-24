@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import modal
 
-from sandbox_runtime.constants import CODE_SERVER_PORT
+from sandbox_runtime.constants import CODE_SERVER_PORT, NOVNC_PORT
 from sandbox_runtime.log_config import get_logger
 from sandbox_runtime.types import SandboxStatus, SessionConfig
 
@@ -48,6 +48,7 @@ class SandboxConfig:
     repo_image_id: str | None = None  # Pre-built repo image ID from provider
     repo_image_sha: str | None = None  # Git SHA the repo image was built from
     code_server_enabled: bool = False  # Whether to start code-server in the sandbox
+    vnc_enabled: bool = True  # Whether to start Xvfb + VNC display stack
 
 
 @dataclass
@@ -62,6 +63,7 @@ class SandboxHandle:
     modal_object_id: str | None = None  # Modal's internal sandbox ID for API calls
     code_server_url: str | None = None
     code_server_password: str | None = None
+    vnc_url: str | None = None
 
     def get_logs(self) -> str:
         """Get sandbox logs."""
@@ -110,6 +112,31 @@ class SandboxManager:
             except Exception as e:
                 log.warn(
                     "code_server.tunnel_error",
+                    sandbox_id=sandbox_id,
+                    attempt=attempt + 1,
+                    retries=retries,
+                    error=type(e).__name__,
+                    exc=e,
+                )
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff * (attempt + 1))
+        return None
+
+    @staticmethod
+    async def _resolve_vnc_tunnel(
+        sandbox: modal.Sandbox, sandbox_id: str, retries: int = 3, backoff: float = 1.0
+    ) -> str | None:
+        """Resolve the noVNC tunnel URL from Modal, retrying on failure."""
+        for attempt in range(retries):
+            try:
+                loop = asyncio.get_running_loop()
+                tunnels = await loop.run_in_executor(None, sandbox.tunnels)
+                tunnel = tunnels[NOVNC_PORT]
+                log.info("vnc.tunnel", sandbox_id=sandbox_id, url=tunnel.url)
+                return tunnel.url
+            except Exception as e:
+                log.warn(
+                    "vnc.tunnel_error",
                     sandbox_id=sandbox_id,
                     attempt=attempt + 1,
                     retries=retries,
@@ -186,6 +213,9 @@ class SandboxManager:
             code_server_password = self._generate_code_server_password()
             env_vars["CODE_SERVER_PASSWORD"] = code_server_password
 
+        if config.vnc_enabled:
+            env_vars["VNC_ENABLED"] = "true"
+
         if config.session_config:
             env_vars["SESSION_CONFIG"] = config.session_config.model_dump_json()
 
@@ -199,6 +229,13 @@ class SandboxManager:
         else:
             image = base_image
 
+        # Build list of ports to expose
+        encrypted_ports: list[int] = []
+        if config.code_server_enabled:
+            encrypted_ports.append(CODE_SERVER_PORT)
+        if config.vnc_enabled:
+            encrypted_ports.append(NOVNC_PORT)
+
         # Create the sandbox
         # The entrypoint command is passed as positional args
         create_kwargs: dict = {
@@ -209,8 +246,8 @@ class SandboxManager:
             "workdir": "/workspace",
             "env": env_vars,
         }
-        if config.code_server_enabled:
-            create_kwargs["encrypted_ports"] = [CODE_SERVER_PORT]
+        if encrypted_ports:
+            create_kwargs["encrypted_ports"] = encrypted_ports
 
         sandbox = await modal.Sandbox.create.aio(
             "python",
@@ -224,6 +261,9 @@ class SandboxManager:
         code_server_url: str | None = None
         if config.code_server_enabled:
             code_server_url = await self._resolve_code_server_tunnel(sandbox, sandbox_id)
+        vnc_url: str | None = None
+        if config.vnc_enabled:
+            vnc_url = await self._resolve_vnc_tunnel(sandbox, sandbox_id)
 
         duration_ms = int((time.time() - start_time) * 1000)
         log.info(
@@ -245,6 +285,7 @@ class SandboxManager:
             modal_object_id=modal_object_id,
             code_server_url=code_server_url,
             code_server_password=code_server_password,
+            vnc_url=vnc_url,
         )
 
     async def create_build_sandbox(
@@ -437,6 +478,7 @@ class SandboxManager:
         user_env_vars: dict[str, str] | None = None,
         timeout_seconds: int = DEFAULT_SANDBOX_TIMEOUT_SECONDS,
         code_server_enabled: bool = False,
+        vnc_enabled: bool = False,
     ) -> SandboxHandle:
         """
         Create a new sandbox from a filesystem snapshot Image.
@@ -515,6 +557,16 @@ class SandboxManager:
             code_server_password = self._generate_code_server_password()
             env_vars["CODE_SERVER_PASSWORD"] = code_server_password
 
+        if vnc_enabled:
+            env_vars["VNC_ENABLED"] = "true"
+
+        # Build list of ports to expose
+        encrypted_ports: list[int] = []
+        if code_server_enabled:
+            encrypted_ports.append(CODE_SERVER_PORT)
+        if vnc_enabled:
+            encrypted_ports.append(NOVNC_PORT)
+
         # Create the sandbox from the snapshot image
         create_kwargs: dict = {
             "image": image,  # Use the snapshot image directly
@@ -524,8 +576,8 @@ class SandboxManager:
             "workdir": "/workspace",
             "env": env_vars,
         }
-        if code_server_enabled:
-            create_kwargs["encrypted_ports"] = [CODE_SERVER_PORT]
+        if encrypted_ports:
+            create_kwargs["encrypted_ports"] = encrypted_ports
 
         sandbox = await modal.Sandbox.create.aio(
             "python",
@@ -538,6 +590,9 @@ class SandboxManager:
         code_server_url: str | None = None
         if code_server_enabled:
             code_server_url = await self._resolve_code_server_tunnel(sandbox, sandbox_id)
+        vnc_url: str | None = None
+        if vnc_enabled:
+            vnc_url = await self._resolve_vnc_tunnel(sandbox, sandbox_id)
 
         duration_ms = int((time.time() - start_time) * 1000)
         log.info(
@@ -560,6 +615,7 @@ class SandboxManager:
             modal_object_id=modal_object_id,
             code_server_url=code_server_url,
             code_server_password=code_server_password,
+            vnc_url=vnc_url,
         )
 
     async def maintain_warm_pool(

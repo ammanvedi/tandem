@@ -51,6 +51,7 @@ function createMockSession(overrides: Partial<SessionRow> = {}): SessionRow {
     spawn_source: "user" as const,
     spawn_depth: 0,
     code_server_enabled: 0,
+    vnc_enabled: 1,
     created_at: Date.now() - 60000,
     updated_at: Date.now(),
     ...overrides,
@@ -76,6 +77,7 @@ function createMockSandbox(
     last_spawn_error_at: null,
     code_server_url: null,
     code_server_password: null,
+    vnc_url: null,
     created_at: Date.now() - 60000,
     spawn_failure_count: 0,
     last_spawn_failure: 0,
@@ -169,6 +171,12 @@ function createMockStorage(
       if (sandbox) {
         sandbox.code_server_url = null;
         sandbox.code_server_password = null;
+      }
+    }),
+    updateSandboxVncUrl: vi.fn(async (url: string) => {
+      calls.push(`updateSandboxVncUrl:${url}`);
+      if (sandbox) {
+        sandbox.vnc_url = url;
       }
     }),
   };

@@ -29,6 +29,7 @@ interface InitRequest {
   spawnSource?: SpawnSource;
   spawnDepth?: number;
   codeServerEnabled?: boolean;
+  vncEnabled?: boolean;
 }
 
 export interface SessionLifecycleHandlerDeps {
@@ -118,6 +119,7 @@ export function createSessionLifecycleHandler(
         spawnSource: body.spawnSource ?? "user",
         spawnDepth: body.spawnDepth ?? 0,
         codeServerEnabled: body.codeServerEnabled ?? false,
+        vncEnabled: body.vncEnabled ?? true,
         createdAt: now,
         updatedAt: now,
       });

@@ -70,6 +70,7 @@ export interface UpsertSessionData {
   spawnSource?: SpawnSource;
   spawnDepth?: number;
   codeServerEnabled?: boolean;
+  vncEnabled?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -226,8 +227,8 @@ export class SessionRepository {
 
   upsertSession(data: UpsertSessionData): void {
     this.sql.exec(
-      `INSERT OR REPLACE INTO session (id, session_name, title, repo_owner, repo_name, repo_id, base_branch, model, reasoning_effort, status, parent_session_id, spawn_source, spawn_depth, code_server_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO session (id, session_name, title, repo_owner, repo_name, repo_id, base_branch, model, reasoning_effort, status, parent_session_id, spawn_source, spawn_depth, code_server_enabled, vnc_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       data.id,
       data.sessionName,
       data.title,
@@ -242,6 +243,7 @@ export class SessionRepository {
       data.spawnSource ?? "user",
       data.spawnDepth ?? 0,
       data.codeServerEnabled ? 1 : 0,
+      data.vncEnabled ? 1 : 0,
       data.createdAt,
       data.updatedAt
     );
@@ -381,6 +383,13 @@ export class SessionRepository {
       `UPDATE sandbox SET code_server_url = ?, code_server_password = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
       url,
       password
+    );
+  }
+
+  updateSandboxVncUrl(url: string): void {
+    this.sql.exec(
+      `UPDATE sandbox SET vnc_url = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
+      url
     );
   }
 

@@ -55,7 +55,8 @@ brew install terraform
 # Node.js (22+)
 brew install node@22
 
-# Python 3.12+ and Modal CLI
+# Python 3.12+ with uv (for Modal/sandbox dependencies) and Modal CLI
+brew install uv
 pipx install modal
 modal setup
 
@@ -76,7 +77,7 @@ git clone https://github.com/YOUR-USERNAME/background-agents.git
 cd background-agents
 npm install
 
-# Build the shared package (required before Terraform deployment)
+# Build the shared package FIRST (all other packages depend on it)
 npm run build -w @open-inspect/shared
 ```
 
@@ -98,7 +99,7 @@ npm run build -w @open-inspect/shared
    of the panel for `*.YOUR-SUBDOMAIN.workers.dev`
 4. **Create API Token** at [API Tokens](https://dash.cloudflare.com/profile/api-tokens):
    - Use template: "Edit Cloudflare Workers"
-   - Add permissions: Workers KV Storage (Edit), Workers R2 Storage (Edit)
+   - Add permissions: Workers KV Storage (Edit), Workers R2 Storage (Edit), **D1 (Edit)**
 5. **Enable R2**: Must add payment info, but first 10 GB/month is free
 
 ### Cloudflare R2 (Terraform State Backend)
@@ -380,11 +381,22 @@ enable_durable_object_bindings = false
 enable_service_bindings        = false
 ```
 
-**Important**: Build the workers before running Terraform (Terraform references the built bundles):
+**Important**: Build the shared package and workers before running Terraform. The shared package
+must be built first since all other packages depend on it:
 
 ```bash
-# From the repository root
+# From the repository root — build shared FIRST, then the workers
+npm run build -w @open-inspect/shared
 npm run build -w @open-inspect/control-plane -w @open-inspect/slack-bot -w @open-inspect/github-bot
+```
+
+**Set up the Python environment** for Modal deployment (Terraform runs `modal deploy` locally, which
+requires the `sandbox-runtime` sibling package to be importable):
+
+```bash
+cd packages/modal-infra
+uv venv && uv pip install -e "../sandbox-runtime" -e ".[dev]"
+cd ../../
 ```
 
 Then run:
@@ -746,6 +758,43 @@ If the bot doesn't see the original message when tagged in a thread reply:
 4. Check that `github_bot_username` matches your App's bot login (e.g., `my-app[bot]`)
 5. For PR reviews, ensure the bot is assigned as a reviewer (not just mentioned)
 6. For comment actions, ensure the bot is @mentioned in a **PR** comment (not an issue)
+
+### Cloudflare D1 "401 Unauthorized"
+
+Your Cloudflare API token is missing D1 permissions. Edit your token at
+[dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) and add
+**Account > D1 > Edit**.
+
+### Modal deployment fails with "No module named 'sandbox_runtime'"
+
+The `modal-infra` package depends on the `sandbox-runtime` sibling package, which must be installed
+locally before Terraform can run `modal deploy`. Set up the Python environment:
+
+```bash
+cd packages/modal-infra
+uv venv && uv pip install -e "../sandbox-runtime" -e ".[dev]"
+```
+
+### Durable Object migration tag errors
+
+**"Actor migration tag precondition failed"**: The migration's `old_tag` doesn't match the worker's
+current tag. This typically happens when re-running after a partial failure.
+
+- If the worker is **brand new** (first deployment), ensure `workers-control-plane.tf` has:
+
+  ```hcl
+  migration_tag       = "v1"
+  migration_old_tag   = null
+  new_sqlite_classes  = []    # empty = registers ALL DO classes
+  ```
+
+- If the worker **already has a tag** from a previous deployment, set `migration_old_tag` to match
+  the existing tag.
+
+**"Cannot create binding for class ... not exported by the script"**: This means the DO class was
+never registered via migration. You must complete Phase 1 (migration) before Phase 2 (bindings).
+Check that `enable_durable_object_bindings = false` and the migration config is correct (see above),
+then run `terraform apply` to apply the migration first.
 
 ### Durable Objects / Service Binding errors
 

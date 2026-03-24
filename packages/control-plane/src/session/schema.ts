@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS session (
   spawn_source TEXT NOT NULL DEFAULT 'user',        -- 'user' or 'agent'
   spawn_depth INTEGER NOT NULL DEFAULT 0,           -- 0 for top-level, parent.depth + 1 for children
   code_server_enabled INTEGER NOT NULL DEFAULT 0,   -- 0 = disabled, 1 = enabled (opt-in)
+  vnc_enabled INTEGER NOT NULL DEFAULT 1,           -- 0 = disabled, 1 = enabled (default on)
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -356,6 +357,14 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
     id: 27,
     description: "Add code_server_enabled to session",
     run: `ALTER TABLE session ADD COLUMN code_server_enabled INTEGER NOT NULL DEFAULT 0`,
+  },
+  {
+    id: 28,
+    description: "Add VNC support fields",
+    run: `
+      ALTER TABLE session ADD COLUMN vnc_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE sandbox ADD COLUMN vnc_url TEXT;
+    `,
   },
 ];
 

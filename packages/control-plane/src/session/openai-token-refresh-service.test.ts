@@ -88,6 +88,7 @@ function createSession(overrides: Partial<SessionRow> = {}): SessionRow {
     spawn_source: "user" as const,
     spawn_depth: 0,
     code_server_enabled: 0,
+    vnc_enabled: 1,
     created_at: 1,
     updated_at: 1,
     ...overrides,

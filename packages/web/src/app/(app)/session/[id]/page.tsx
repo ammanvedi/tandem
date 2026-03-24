@@ -38,7 +38,9 @@ import {
   StopIcon,
   CopyIcon,
   ErrorIcon,
+  MonitorIcon,
 } from "@/components/ui/icons";
+import { getSafeExternalUrl } from "@/lib/urls";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
 
 type ToolCallEvent = Extract<SandboxEvent, { type: "tool_call" }>;
@@ -467,6 +469,7 @@ function SessionContent({
   const baseResolvedTitle = sessionState?.title ?? fallbackSessionInfo.title ?? fallbackRepoLabel;
 
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isVncOpen, setIsVncOpen] = useState(true);
   const [isRenaming, setIsRenaming] = useState(false);
   const [title, setTitle] = useState(baseResolvedTitle);
   const [optimisticTitle, setOptimisticTitle] = useState<string | null>(null);
@@ -669,6 +672,7 @@ function SessionContent({
     [fallbackSessionInfo, sessionState]
   );
   const showTimelineSkeleton = events.length === 0 && (connecting || replaying);
+  const safeVncUrl = getSafeExternalUrl(sessionState?.vncUrl);
 
   return (
     <div className="h-full flex flex-col">
@@ -718,6 +722,21 @@ function SessionContent({
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {safeVncUrl && (
+              <button
+                type="button"
+                onClick={() => setIsVncOpen((v) => !v)}
+                className={`p-1.5 transition ${
+                  isVncOpen
+                    ? "text-accent hover:text-accent/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                title={isVncOpen ? "Hide display" : "Show display"}
+                aria-label={isVncOpen ? "Hide VNC display" : "Show VNC display"}
+              >
+                <MonitorIcon className="w-4 h-4" />
+              </button>
+            )}
             <button
               ref={detailsButtonRef}
               type="button"
@@ -757,6 +776,21 @@ function SessionContent({
           >
             Reconnect
           </button>
+        </div>
+      )}
+
+      {/* VNC Display */}
+      {safeVncUrl && isVncOpen && (
+        <div
+          className="flex-shrink-0 border-b border-border-muted bg-black relative"
+          style={{ height: 400 }}
+        >
+          <iframe
+            src={safeVncUrl}
+            className="w-full h-full border-0"
+            allow="clipboard-read; clipboard-write"
+            title="VNC Display"
+          />
         </div>
       )}
 

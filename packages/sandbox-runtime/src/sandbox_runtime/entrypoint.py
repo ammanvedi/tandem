@@ -22,7 +22,7 @@ from pathlib import Path
 
 import httpx
 
-from .constants import CODE_SERVER_PORT
+from .constants import CODE_SERVER_PORT, NOVNC_PORT, VNC_PORT
 from .log_config import configure_logging, get_logger
 
 configure_logging()
@@ -55,6 +55,10 @@ class SandboxSupervisor:
         self.opencode_process: asyncio.subprocess.Process | None = None
         self.bridge_process: asyncio.subprocess.Process | None = None
         self.code_server_process: asyncio.subprocess.Process | None = None
+        self.xvfb_process: asyncio.subprocess.Process | None = None
+        self.vnc_process: asyncio.subprocess.Process | None = None
+        self.novnc_process: asyncio.subprocess.Process | None = None
+        self.fluxbox_process: asyncio.subprocess.Process | None = None
         self.shutdown_event = asyncio.Event()
         self.git_sync_complete = asyncio.Event()
         self.opencode_ready = asyncio.Event()
@@ -384,6 +388,95 @@ class SandboxSupervisor:
         except Exception as e:
             self.log.warn("code_server.log_forward_error", exc=e)
 
+    async def start_vnc_display(self) -> None:
+        """Start Xvfb virtual display, fluxbox WM, x11vnc, and noVNC.
+
+        Gated on VNC_ENABLED=true env var.  Launches four processes:
+        1. Xvfb :99          — virtual framebuffer
+        2. fluxbox            — lightweight window manager
+        3. x11vnc :5900       — VNC server exposing the display
+        4. websockify :6080   — noVNC websocket proxy (browser-based VNC)
+        """
+        if os.environ.get("VNC_ENABLED", "true").lower() != "true":
+            self.log.info("vnc.skip", reason="not_enabled")
+            return
+
+        display = os.environ.get("DISPLAY", ":99")
+
+        # 1. Xvfb
+        self.xvfb_process = await asyncio.create_subprocess_exec(
+            "Xvfb", display,
+            "-screen", "0", "1920x1080x24",
+            "-ac",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.sleep(0.5)
+        self.log.info("vnc.xvfb_started", display=display)
+
+        # 2. fluxbox (lightweight WM)
+        self.fluxbox_process = await asyncio.create_subprocess_exec(
+            "fluxbox",
+            env={**os.environ, "DISPLAY": display},
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        self.log.info("vnc.fluxbox_started")
+
+        # 3. x11vnc
+        vnc_cmd = [
+            "x11vnc",
+            "-display", display,
+            "-forever",
+            "-shared",
+            "-rfbport", str(VNC_PORT),
+        ]
+        vnc_password = os.environ.get("VNC_PASSWORD")
+        if vnc_password:
+            vnc_cmd += ["-passwd", vnc_password]
+        else:
+            vnc_cmd.append("-nopw")
+
+        self.vnc_process = await asyncio.create_subprocess_exec(
+            *vnc_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        asyncio.create_task(self._forward_vnc_logs())
+        self.log.info("vnc.x11vnc_started", port=VNC_PORT)
+
+        # 4. noVNC (websockify proxy)
+        self.novnc_process = await asyncio.create_subprocess_exec(
+            "websockify",
+            "--web", "/opt/novnc",
+            str(NOVNC_PORT),
+            f"localhost:{VNC_PORT}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        asyncio.create_task(self._forward_novnc_logs())
+        self.log.info("vnc.novnc_started", port=NOVNC_PORT)
+
+    async def _forward_vnc_logs(self) -> None:
+        """Forward x11vnc stdout to supervisor logs."""
+        if not self.vnc_process or not self.vnc_process.stdout:
+            return
+        try:
+            async for line in self.vnc_process.stdout:
+                self.log.info("vnc.x11vnc.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("vnc.x11vnc.log_forward_error", exc=e)
+
+    async def _forward_novnc_logs(self) -> None:
+        """Forward noVNC/websockify stdout to supervisor logs."""
+        if not self.novnc_process or not self.novnc_process.stdout:
+            return
+        try:
+            async for line in self.novnc_process.stdout:
+                self.log.info("vnc.novnc.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("vnc.novnc.log_forward_error", exc=e)
+
     async def start_opencode(self) -> None:
         """Start OpenCode server with configuration."""
         self._setup_openai_oauth()
@@ -559,6 +652,7 @@ class SandboxSupervisor:
         restart_count = 0
         bridge_restart_count = 0
         code_server_restart_count = 0
+        vnc_restart_count = 0
 
         while not self.shutdown_event.is_set():
             # Check OpenCode process
@@ -659,6 +753,26 @@ class SandboxSupervisor:
                         "code_server.max_restarts", restart_count=code_server_restart_count
                     )
                     self.code_server_process = None
+
+            # Check VNC stack (x11vnc) — non-fatal, best-effort restart
+            if self.vnc_process and self.vnc_process.returncode is not None:
+                vnc_restart_count += 1
+                self.log.warn(
+                    "vnc.x11vnc.crash",
+                    exit_code=self.vnc_process.returncode,
+                    restart_count=vnc_restart_count,
+                )
+                if vnc_restart_count <= self.MAX_RESTARTS:
+                    delay = min(self.BACKOFF_BASE**vnc_restart_count, self.BACKOFF_MAX)
+                    await asyncio.sleep(delay)
+                    try:
+                        await self.start_vnc_display()
+                    except Exception as e:
+                        self.log.warn("vnc.restart_failed", exc=e)
+                        self.vnc_process = None
+                else:
+                    self.log.warn("vnc.max_restarts", restart_count=vnc_restart_count)
+                    self.vnc_process = None
 
             await asyncio.sleep(1.0)
 
@@ -898,7 +1012,10 @@ class SandboxSupervisor:
                 await self.shutdown_event.wait()
                 return
 
-            # Phase 3.5: Start code-server (non-blocking, no health check needed)
+            # Phase 3.5: Start VNC display stack (Xvfb + fluxbox + x11vnc + noVNC)
+            await self.start_vnc_display()
+
+            # Phase 3.6: Start code-server (non-blocking, no health check needed)
             await self.start_code_server()
 
             # Phase 4: Start OpenCode server (in repo directory)
@@ -959,6 +1076,20 @@ class SandboxSupervisor:
                 await asyncio.wait_for(self.code_server_process.wait(), timeout=5.0)
             except TimeoutError:
                 self.code_server_process.kill()
+
+        # Terminate VNC stack (noVNC → x11vnc → fluxbox → Xvfb)
+        for name, proc in [
+            ("novnc", self.novnc_process),
+            ("x11vnc", self.vnc_process),
+            ("fluxbox", self.fluxbox_process),
+            ("xvfb", self.xvfb_process),
+        ]:
+            if proc and proc.returncode is None:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=3.0)
+                except TimeoutError:
+                    proc.kill()
 
         # Terminate OpenCode
         if self.opencode_process and self.opencode_process.returncode is None:

@@ -87,6 +87,8 @@ export interface SandboxStorage {
   updateSandboxCodeServer(url: string, password: string): void | Promise<void>;
   /** Clear stale code-server URL and password (e.g. on sandbox teardown) */
   clearSandboxCodeServer(): void;
+  /** Update VNC URL on the sandbox row */
+  updateSandboxVncUrl(url: string): void | Promise<void>;
 }
 
 /**
@@ -370,6 +372,7 @@ export class SandboxLifecycleManager {
 
       // Create sandbox via provider
       const codeServerEnabled = session.code_server_enabled === 1;
+      const vncEnabled = session.vnc_enabled === 1;
       const createConfig: CreateSandboxConfig = {
         sessionId,
         sandboxId: expectedSandboxId,
@@ -385,6 +388,7 @@ export class SandboxLifecycleManager {
         timeoutSeconds,
         branch: session.base_branch,
         codeServerEnabled,
+        vncEnabled,
       };
 
       const result = await this.provider.createSandbox(createConfig);
@@ -403,6 +407,11 @@ export class SandboxLifecycleManager {
       // Store code-server details and push to connected clients
       if (result.codeServerUrl && result.codeServerPassword) {
         await this.storeAndBroadcastCodeServer(result.codeServerUrl, result.codeServerPassword);
+      }
+
+      // Store and broadcast VNC URL
+      if (result.vncUrl) {
+        await this.storeAndBroadcastVnc(result.vncUrl);
       }
 
       this.storage.updateSandboxStatus("connecting");
@@ -500,6 +509,7 @@ export class SandboxLifecycleManager {
         session.spawn_source === "agent" ? CHILD_SANDBOX_TIMEOUT_SECONDS : undefined;
 
       const codeServerEnabled = session.code_server_enabled === 1;
+      const vncEnabled = session.vnc_enabled === 1;
       const result = await this.provider.restoreFromSnapshot({
         snapshotImageId,
         sessionId: session.session_name || session.id,
@@ -514,6 +524,7 @@ export class SandboxLifecycleManager {
         timeoutSeconds,
         branch: session.base_branch,
         codeServerEnabled,
+        vncEnabled,
       });
 
       if (result.success) {
@@ -531,6 +542,11 @@ export class SandboxLifecycleManager {
         // Store code-server details and push to connected clients
         if (result.codeServerUrl && result.codeServerPassword) {
           await this.storeAndBroadcastCodeServer(result.codeServerUrl, result.codeServerPassword);
+        }
+
+        // Store and broadcast VNC URL
+        if (result.vncUrl) {
+          await this.storeAndBroadcastVnc(result.vncUrl);
         }
 
         this.storage.updateSandboxStatus("connecting");
@@ -879,6 +895,15 @@ export class SandboxLifecycleManager {
       type: "code_server_info",
       url,
       password,
+    });
+  }
+
+  private async storeAndBroadcastVnc(url: string): Promise<void> {
+    this.log.info("Storing and broadcasting VNC info", { url });
+    await this.storage.updateSandboxVncUrl(url);
+    this.broadcaster.broadcast({
+      type: "vnc_info",
+      url,
     });
   }
 

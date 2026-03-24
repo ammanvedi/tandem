@@ -7,6 +7,8 @@ This image provides a complete development environment with:
 - Python 3.12 with uv
 - OpenCode CLI pre-installed
 - agent-browser CLI with headless Chrome for browser automation
+- Xvfb virtual display, x11vnc, noVNC for VNC-based browser viewing
+- Playwright with Chromium for browser automation
 - Sandbox entrypoint and bridge code
 """
 
@@ -28,9 +30,12 @@ CODE_SERVER_VERSION = "4.109.5"
 # agent-browser version to install (pinned for reproducible images)
 AGENT_BROWSER_VERSION = "0.21.2"
 
+# noVNC version to install (pinned for reproducible images)
+NOVNC_VERSION = "1.5.0"
+
 # Cache buster - change this to force Modal image rebuild
-# v44: replace Playwright with agent-browser for browser automation
-CACHE_BUSTER = "v44-agent-browser"
+# v45: add Xvfb, x11vnc, noVNC, fluxbox, and Playwright for VNC-based browser automation
+CACHE_BUSTER = "v45-playwright-vnc"
 
 # Base image with all development tools
 base_image = (
@@ -124,6 +129,27 @@ base_image = (
         "agent-browser install",
         "agent-browser --version",
     )
+    # Virtual display + VNC for browser viewing
+    .apt_install(
+        "xvfb",
+        "x11vnc",
+        "fluxbox",
+    )
+    # Install noVNC for browser-based VNC access (websocket proxy + web UI)
+    .run_commands(
+        f"curl -fsSL -o /tmp/novnc.tar.gz"
+        f" https://github.com/novnc/noVNC/archive/refs/tags/v{NOVNC_VERSION}.tar.gz",
+        "mkdir -p /opt/novnc",
+        "tar -xzf /tmp/novnc.tar.gz -C /opt/novnc --strip-components=1",
+        "rm /tmp/novnc.tar.gz",
+        "ln -s /opt/novnc/vnc.html /opt/novnc/index.html",
+        "pip install websockify",
+    )
+    # Install Playwright with Chromium (--with-deps pulls remaining system libs)
+    .run_commands(
+        "pip install playwright",
+        "playwright install --with-deps chromium",
+    )
     # Create working directories
     .run_commands(
         "mkdir -p /workspace",
@@ -142,6 +168,8 @@ base_image = (
             "SANDBOX_VERSION": CACHE_BUSTER,
             # NODE_PATH for globally installed modules (used by custom tools)
             "NODE_PATH": "/usr/lib/node_modules",
+            # Virtual display for Playwright / browser automation (started by entrypoint when VNC enabled)
+            "DISPLAY": ":99",
         }
     )
     # Add sandbox runtime code to the image (provider-agnostic bridge, entrypoint, tools, plugins)

@@ -37,6 +37,7 @@ export interface SessionRow {
   spawn_source: SpawnSource;
   spawn_depth: number;
   code_server_enabled: number; // 0 = disabled (default), 1 = enabled
+  vnc_enabled: number; // 0 = disabled, 1 = enabled (default)
   created_at: number;
   updated_at: number;
 }
@@ -105,6 +106,7 @@ export interface SandboxRow {
   last_spawn_error_at: number | null;
   code_server_url: string | null;
   code_server_password: string | null;
+  vnc_url: string | null;
   created_at: number;
 }
 

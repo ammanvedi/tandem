@@ -60,6 +60,7 @@ modal_workspace = ""
 # OAuth credentials (from GitHub App -> "Client secrets" section)
 github_client_id = ""      # e.g., "Iv1.abc123..."
 github_client_secret = ""
+github_webhook_secret = ""
 
 # App credentials
 github_app_id = ""

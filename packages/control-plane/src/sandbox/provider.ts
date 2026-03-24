@@ -59,6 +59,8 @@ export interface CreateSandboxConfig {
   branch?: string;
   /** Whether to enable code-server (browser-based editor) in the sandbox */
   codeServerEnabled?: boolean;
+  /** Whether to enable VNC display stack (Xvfb + x11vnc + noVNC) in the sandbox */
+  vncEnabled?: boolean;
 }
 
 /**
@@ -77,6 +79,8 @@ export interface CreateSandboxResult {
   codeServerUrl?: string;
   /** Code-server password (if available) */
   codeServerPassword?: string;
+  /** noVNC tunnel URL (if available) */
+  vncUrl?: string;
 }
 
 /**
@@ -111,6 +115,8 @@ export interface RestoreConfig {
   correlation?: CorrelationContext;
   /** Whether to enable code-server (browser-based editor) in the sandbox */
   codeServerEnabled?: boolean;
+  /** Whether to enable VNC display stack (Xvfb + x11vnc + noVNC) in the sandbox */
+  vncEnabled?: boolean;
 }
 
 /**
@@ -129,6 +135,8 @@ export interface RestoreResult {
   codeServerUrl?: string;
   /** Code-server password (if available) */
   codeServerPassword?: string;
+  /** noVNC tunnel URL (if available) */
+  vncUrl?: string;
 }
 
 /**

@@ -30,6 +30,13 @@ cd "${DEPLOY_PATH}" || {
     exit 1
 }
 
+# Activate virtual environment if present (needed for local package imports)
+if [ -f ".venv/bin/activate" ]; then
+    echo "Activating virtual environment"
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+fi
+
 # Deploy using Modal CLI
 if [ "${DEPLOY_MODULE}" = "deploy" ]; then
     # Method 1: Use deploy.py wrapper (recommended)

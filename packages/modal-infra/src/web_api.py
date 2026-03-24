@@ -161,6 +161,7 @@ async def api_create_sandbox(
             repo_image_id=request.get("repo_image_id") or None,
             repo_image_sha=request.get("repo_image_sha") or None,
             code_server_enabled=bool(request.get("code_server_enabled", False)),
+            vnc_enabled=bool(request.get("vnc_enabled", True)),
         )
 
         handle = await manager.create_sandbox(config)
@@ -174,6 +175,7 @@ async def api_create_sandbox(
                 "created_at": handle.created_at,
                 "code_server_url": handle.code_server_url,
                 "code_server_password": handle.code_server_password,
+                "vnc_url": handle.vnc_url,
             },
         }
     except Exception as e:
@@ -520,6 +522,7 @@ async def api_restore_sandbox(
             log.warn("github.token_error", exc=e)
 
         code_server_enabled = bool(request.get("code_server_enabled", False))
+        vnc_enabled = bool(request.get("vnc_enabled", True))
 
         # Restore sandbox from snapshot
         handle = await manager.restore_from_snapshot(
@@ -532,6 +535,7 @@ async def api_restore_sandbox(
             user_env_vars=user_env_vars,
             timeout_seconds=timeout_seconds,
             code_server_enabled=code_server_enabled,
+            vnc_enabled=vnc_enabled,
         )
 
         return {
@@ -542,6 +546,7 @@ async def api_restore_sandbox(
                 "status": handle.status.value,
                 "code_server_url": handle.code_server_url,
                 "code_server_password": handle.code_server_password,
+                "vnc_url": handle.vnc_url,
             },
         }
     except HTTPException as e:
