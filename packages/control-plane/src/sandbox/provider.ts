@@ -81,6 +81,8 @@ export interface CreateSandboxResult {
   codeServerPassword?: string;
   /** noVNC tunnel URL (if available) */
   vncUrl?: string;
+  /** Dev server tunnel URL (if available) */
+  devServerUrl?: string;
 }
 
 /**
@@ -137,6 +139,8 @@ export interface RestoreResult {
   codeServerPassword?: string;
   /** noVNC tunnel URL (if available) */
   vncUrl?: string;
+  /** Dev server tunnel URL (if available) */
+  devServerUrl?: string;
 }
 
 /**

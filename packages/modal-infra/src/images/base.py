@@ -34,8 +34,8 @@ AGENT_BROWSER_VERSION = "0.21.2"
 NOVNC_VERSION = "1.5.0"
 
 # Cache buster - change this to force Modal image rebuild
-# v45: add Xvfb, x11vnc, noVNC, fluxbox, and Playwright for VNC-based browser automation
-CACHE_BUSTER = "v45-playwright-vnc"
+# v46: add dev server auto-detect with port 3000 tunnel
+CACHE_BUSTER = "v46-dev-server-tunnel"
 
 # Base image with all development tools
 base_image = (

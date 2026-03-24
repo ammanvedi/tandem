@@ -22,7 +22,7 @@ from pathlib import Path
 
 import httpx
 
-from .constants import CODE_SERVER_PORT, NOVNC_PORT, VNC_PORT
+from .constants import CODE_SERVER_PORT, DEV_SERVER_PORT, NOVNC_PORT, VNC_PORT
 from .log_config import configure_logging, get_logger
 
 configure_logging()
@@ -59,6 +59,7 @@ class SandboxSupervisor:
         self.vnc_process: asyncio.subprocess.Process | None = None
         self.novnc_process: asyncio.subprocess.Process | None = None
         self.fluxbox_process: asyncio.subprocess.Process | None = None
+        self.dev_server_process: asyncio.subprocess.Process | None = None
         self.shutdown_event = asyncio.Event()
         self.git_sync_complete = asyncio.Event()
         self.opencode_ready = asyncio.Event()
@@ -477,6 +478,87 @@ class SandboxSupervisor:
         except Exception as e:
             self.log.warn("vnc.novnc.log_forward_error", exc=e)
 
+    async def start_dev_server(self) -> None:
+        """Detect a dev script in package.json and run npm install + npm run dev.
+
+        Gated on DEV_SERVER_ENABLED env var (default "true").
+        Looks for a "dev" entry under "scripts" in the repo's package.json.
+        If found, runs npm install followed by npm run dev with PORT forced
+        to DEV_SERVER_PORT so common frameworks bind to a predictable port.
+        """
+        if os.environ.get("DEV_SERVER_ENABLED", "true").lower() != "true":
+            self.log.info("dev_server.skip", reason="not_enabled")
+            return
+
+        package_json_path = self.repo_path / "package.json"
+        if not package_json_path.exists():
+            self.log.info("dev_server.skip", reason="no_package_json")
+            return
+
+        try:
+            pkg = json.loads(package_json_path.read_text())
+        except Exception as e:
+            self.log.warn("dev_server.skip", reason="invalid_package_json", exc=e)
+            return
+
+        scripts = pkg.get("scripts", {})
+        if "dev" not in scripts:
+            self.log.info("dev_server.skip", reason="no_dev_script")
+            return
+
+        self.log.info("dev_server.detected", script=scripts["dev"])
+
+        # npm install (capped at 120s)
+        NPM_INSTALL_TIMEOUT_SECONDS = 120
+        try:
+            install_proc = await asyncio.create_subprocess_exec(
+                "npm", "install",
+                cwd=str(self.repo_path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=os.environ.copy(),
+            )
+            stdout, _ = await asyncio.wait_for(
+                install_proc.communicate(), timeout=NPM_INSTALL_TIMEOUT_SECONDS
+            )
+            if install_proc.returncode != 0:
+                self.log.warn(
+                    "dev_server.npm_install_failed",
+                    exit_code=install_proc.returncode,
+                    output=stdout.decode()[-2000:] if stdout else "",
+                )
+                return
+            self.log.info("dev_server.npm_install_done")
+        except asyncio.TimeoutError:
+            self.log.warn("dev_server.npm_install_timeout", timeout_s=NPM_INSTALL_TIMEOUT_SECONDS)
+            return
+        except Exception as e:
+            self.log.warn("dev_server.npm_install_error", exc=e)
+            return
+
+        # npm run dev (background process with PORT forced)
+        env = os.environ.copy()
+        env["PORT"] = str(DEV_SERVER_PORT)
+        self.dev_server_process = await asyncio.create_subprocess_exec(
+            "npm", "run", "dev",
+            cwd=str(self.repo_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+        )
+        asyncio.create_task(self._forward_dev_server_logs())
+        self.log.info("dev_server.started", port=DEV_SERVER_PORT)
+
+    async def _forward_dev_server_logs(self) -> None:
+        """Forward dev server stdout to supervisor logs."""
+        if not self.dev_server_process or not self.dev_server_process.stdout:
+            return
+        try:
+            async for line in self.dev_server_process.stdout:
+                self.log.info("dev_server.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("dev_server.log_forward_error", exc=e)
+
     async def start_opencode(self) -> None:
         """Start OpenCode server with configuration."""
         self._setup_openai_oauth()
@@ -653,6 +735,7 @@ class SandboxSupervisor:
         bridge_restart_count = 0
         code_server_restart_count = 0
         vnc_restart_count = 0
+        dev_server_restart_count = 0
 
         while not self.shutdown_event.is_set():
             # Check OpenCode process
@@ -753,6 +836,28 @@ class SandboxSupervisor:
                         "code_server.max_restarts", restart_count=code_server_restart_count
                     )
                     self.code_server_process = None
+
+            # Check dev server — non-fatal, best-effort restart
+            if self.dev_server_process and self.dev_server_process.returncode is not None:
+                dev_server_restart_count += 1
+                self.log.warn(
+                    "dev_server.crash",
+                    exit_code=self.dev_server_process.returncode,
+                    restart_count=dev_server_restart_count,
+                )
+                if dev_server_restart_count <= self.MAX_RESTARTS:
+                    delay = min(self.BACKOFF_BASE**dev_server_restart_count, self.BACKOFF_MAX)
+                    await asyncio.sleep(delay)
+                    try:
+                        await self.start_dev_server()
+                    except Exception as e:
+                        self.log.warn("dev_server.restart_failed", exc=e)
+                        self.dev_server_process = None
+                else:
+                    self.log.warn(
+                        "dev_server.max_restarts", restart_count=dev_server_restart_count
+                    )
+                    self.dev_server_process = None
 
             # Check VNC stack (x11vnc) — non-fatal, best-effort restart
             if self.vnc_process and self.vnc_process.returncode is not None:
@@ -1012,10 +1117,13 @@ class SandboxSupervisor:
                 await self.shutdown_event.wait()
                 return
 
-            # Phase 3.5: Start VNC display stack (Xvfb + fluxbox + x11vnc + noVNC)
+            # Phase 3.5: Start dev server (auto-detect npm run dev)
+            await self.start_dev_server()
+
+            # Phase 3.6: Start VNC display stack (Xvfb + fluxbox + x11vnc + noVNC)
             await self.start_vnc_display()
 
-            # Phase 3.6: Start code-server (non-blocking, no health check needed)
+            # Phase 3.7: Start code-server (non-blocking, no health check needed)
             await self.start_code_server()
 
             # Phase 4: Start OpenCode server (in repo directory)
@@ -1076,6 +1184,14 @@ class SandboxSupervisor:
                 await asyncio.wait_for(self.code_server_process.wait(), timeout=5.0)
             except TimeoutError:
                 self.code_server_process.kill()
+
+        # Terminate dev server
+        if self.dev_server_process and self.dev_server_process.returncode is None:
+            self.dev_server_process.terminate()
+            try:
+                await asyncio.wait_for(self.dev_server_process.wait(), timeout=5.0)
+            except TimeoutError:
+                self.dev_server_process.kill()
 
         # Terminate VNC stack (noVNC → x11vnc → fluxbox → Xvfb)
         for name, proc in [

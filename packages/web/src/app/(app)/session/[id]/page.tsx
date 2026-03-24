@@ -39,6 +39,7 @@ import {
   CopyIcon,
   ErrorIcon,
   MonitorIcon,
+  GlobeIcon,
 } from "@/components/ui/icons";
 import { getSafeExternalUrl } from "@/lib/urls";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
@@ -470,6 +471,7 @@ function SessionContent({
 
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isVncOpen, setIsVncOpen] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(true);
   const [isRenaming, setIsRenaming] = useState(false);
   const [title, setTitle] = useState(baseResolvedTitle);
   const [optimisticTitle, setOptimisticTitle] = useState<string | null>(null);
@@ -673,6 +675,7 @@ function SessionContent({
   );
   const showTimelineSkeleton = events.length === 0 && (connecting || replaying);
   const safeVncUrl = getSafeExternalUrl(sessionState?.vncUrl);
+  const safeDevServerUrl = getSafeExternalUrl(sessionState?.devServerUrl);
 
   return (
     <div className="h-full flex flex-col">
@@ -722,6 +725,21 @@ function SessionContent({
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {safeDevServerUrl && (
+              <button
+                type="button"
+                onClick={() => setIsPreviewOpen((v) => !v)}
+                className={`p-1.5 transition ${
+                  isPreviewOpen
+                    ? "text-accent hover:text-accent/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                title={isPreviewOpen ? "Hide preview" : "Show preview"}
+                aria-label={isPreviewOpen ? "Hide dev server preview" : "Show dev server preview"}
+              >
+                <GlobeIcon className="w-4 h-4" />
+              </button>
+            )}
             {safeVncUrl && (
               <button
                 type="button"
@@ -776,6 +794,21 @@ function SessionContent({
           >
             Reconnect
           </button>
+        </div>
+      )}
+
+      {/* Dev Server Preview */}
+      {safeDevServerUrl && isPreviewOpen && (
+        <div
+          className="flex-shrink-0 border-b border-border-muted bg-background relative"
+          style={{ height: 400 }}
+        >
+          <iframe
+            src={safeDevServerUrl}
+            className="w-full h-full border-0"
+            allow="clipboard-read; clipboard-write"
+            title="Dev Server Preview"
+          />
         </div>
       )}
 

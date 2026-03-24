@@ -393,6 +393,13 @@ export class SessionRepository {
     );
   }
 
+  updateSandboxDevServerUrl(url: string): void {
+    this.sql.exec(
+      `UPDATE sandbox SET dev_server_url = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
+      url
+    );
+  }
+
   clearSandboxCodeServer(): void {
     this.sql.exec(
       `UPDATE sandbox SET code_server_url = NULL, code_server_password = NULL WHERE id = (SELECT id FROM sandbox LIMIT 1)`

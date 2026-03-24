@@ -69,8 +69,19 @@ function isServiceBinding(value: unknown): value is ServiceBinding {
 /**
  * Try to get the Cloudflare Workers service binding for the control plane.
  * Returns null when not running on Cloudflare Workers.
+ *
+ * The runtime check (globalThis.caches + no process.env.NODE_ENV) prevents
+ * the import from resolving during local Next.js dev, where the package is
+ * installed but returns a binding that routes to a non-existent local
+ * wrangler session.
  */
 async function getServiceBinding(): Promise<ServiceBinding | null> {
+  // // Node.js / local dev: skip entirely — the package resolves but the
+  // // binding it returns proxies to a local wrangler session that isn't running.
+  if (typeof process !== "undefined" && process.versions?.node) {
+    return null;
+  }
+
   try {
     const { getCloudflareContext } = await import("@opennextjs/cloudflare");
     const ctx = await getCloudflareContext({ async: true });

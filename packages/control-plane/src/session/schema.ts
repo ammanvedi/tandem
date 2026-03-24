@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS sandbox (
   last_spawn_failure INTEGER,                       -- Timestamp of last spawn failure
   code_server_url TEXT,                             -- Code-server tunnel URL (rotates on wake/restore)
   code_server_password TEXT,                        -- Code-server password (rotates on each wake/restore)
+  vnc_url TEXT,                                     -- noVNC tunnel URL (rotates on wake/restore)
+  dev_server_url TEXT,                              -- Dev server tunnel URL (rotates on wake/restore)
   created_at INTEGER NOT NULL
 );
 
@@ -360,11 +362,18 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
   },
   {
     id: 28,
-    description: "Add VNC support fields",
-    run: `
-      ALTER TABLE session ADD COLUMN vnc_enabled INTEGER NOT NULL DEFAULT 1;
-      ALTER TABLE sandbox ADD COLUMN vnc_url TEXT;
-    `,
+    description: "Add VNC enabled flag to session",
+    run: `ALTER TABLE session ADD COLUMN vnc_enabled INTEGER NOT NULL DEFAULT 1`,
+  },
+  {
+    id: 29,
+    description: "Add VNC URL to sandbox",
+    run: `ALTER TABLE sandbox ADD COLUMN vnc_url TEXT`,
+  },
+  {
+    id: 30,
+    description: "Add dev server URL to sandbox",
+    run: `ALTER TABLE sandbox ADD COLUMN dev_server_url TEXT`,
   },
 ];
 

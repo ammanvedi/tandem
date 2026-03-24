@@ -414,6 +414,11 @@ export class SandboxLifecycleManager {
         await this.storeAndBroadcastVnc(result.vncUrl);
       }
 
+      // Store and broadcast dev server URL
+      if (result.devServerUrl) {
+        await this.storeAndBroadcastDevServer(result.devServerUrl);
+      }
+
       this.storage.updateSandboxStatus("connecting");
       this.broadcaster.broadcast({ type: "sandbox_status", status: "connecting" });
 
@@ -547,6 +552,11 @@ export class SandboxLifecycleManager {
         // Store and broadcast VNC URL
         if (result.vncUrl) {
           await this.storeAndBroadcastVnc(result.vncUrl);
+        }
+
+        // Store and broadcast dev server URL
+        if (result.devServerUrl) {
+          await this.storeAndBroadcastDevServer(result.devServerUrl);
         }
 
         this.storage.updateSandboxStatus("connecting");
@@ -903,6 +913,15 @@ export class SandboxLifecycleManager {
     await this.storage.updateSandboxVncUrl(url);
     this.broadcaster.broadcast({
       type: "vnc_info",
+      url,
+    });
+  }
+
+  private async storeAndBroadcastDevServer(url: string): Promise<void> {
+    this.log.info("Storing and broadcasting dev server info", { url });
+    await this.storage.updateSandboxDevServerUrl(url);
+    this.broadcaster.broadcast({
+      type: "dev_server_info",
       url,
     });
   }

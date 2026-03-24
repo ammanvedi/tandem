@@ -296,6 +296,7 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
                   codeServerUrl: undefined,
                   codeServerPassword: undefined,
                   vncUrl: undefined,
+                  devServerUrl: undefined,
                 }
               : null
           );
@@ -313,6 +314,7 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
                     codeServerUrl: undefined,
                     codeServerPassword: undefined,
                     vncUrl: undefined,
+                    devServerUrl: undefined,
                   }),
                 }
               : null
@@ -328,6 +330,10 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
 
         case "vnc_info":
           setSessionState((prev) => (prev ? { ...prev, vncUrl: data.url } : null));
+          break;
+
+        case "dev_server_info":
+          setSessionState((prev) => (prev ? { ...prev, devServerUrl: data.url } : null));
           break;
 
         case "sandbox_ready":

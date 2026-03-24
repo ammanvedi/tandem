@@ -9,6 +9,7 @@ import {
   FilesChangedSection,
   CodeServerSection,
   VncSection,
+  DevServerSection,
 } from "./sidebar";
 import { ChildSessionsSection } from "./sidebar/child-sessions-section";
 import { extractLatestTasks } from "@/lib/tasks";
@@ -83,6 +84,16 @@ export function SessionRightSidebarContent({
       {sessionState.vncUrl && (
         <div className="px-4 py-4 border-b border-border-muted">
           <VncSection url={sessionState.vncUrl} sandboxStatus={sessionState.sandboxStatus} />
+        </div>
+      )}
+
+      {/* Dev Server Preview */}
+      {sessionState.devServerUrl && (
+        <div className="px-4 py-4 border-b border-border-muted">
+          <DevServerSection
+            url={sessionState.devServerUrl}
+            sandboxStatus={sessionState.sandboxStatus}
+          />
         </div>
       )}
 

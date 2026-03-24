@@ -274,6 +274,7 @@ export class ModalClient {
         code_server_url?: string;
         code_server_password?: string;
         vnc_url?: string;
+        dev_server_url?: string;
       }>;
 
       if (!result.success || !result.data) {
@@ -289,6 +290,7 @@ export class ModalClient {
         codeServerUrl: result.data.code_server_url,
         codeServerPassword: result.data.code_server_password,
         vncUrl: result.data.vnc_url,
+        devServerUrl: result.data.dev_server_url,
       };
     } finally {
       log.info("modal.request", {
@@ -355,6 +357,7 @@ export class ModalClient {
         code_server_url?: string;
         code_server_password?: string;
         vnc_url?: string;
+        dev_server_url?: string;
       }>;
 
       if (!result.success) {
@@ -369,6 +372,7 @@ export class ModalClient {
         codeServerUrl: result.data?.code_server_url,
         codeServerPassword: result.data?.code_server_password,
         vncUrl: result.data?.vnc_url,
+        devServerUrl: result.data?.dev_server_url,
       };
     } finally {
       log.info("modal.request", {

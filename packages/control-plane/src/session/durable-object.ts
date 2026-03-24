@@ -1480,6 +1480,7 @@ export class SessionDO extends DurableObject<Env> {
       codeServerUrl: sandbox?.code_server_url ?? null,
       codeServerPassword,
       vncUrl: sandbox?.vnc_url ?? null,
+      devServerUrl: sandbox?.dev_server_url ?? null,
     };
   }
 
