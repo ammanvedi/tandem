@@ -89,6 +89,8 @@ export interface SandboxStorage {
   clearSandboxCodeServer(): void;
   /** Update VNC URL on the sandbox row */
   updateSandboxVncUrl(url: string): void | Promise<void>;
+  /** Update dev server URL on the sandbox row */
+  updateSandboxDevServerUrl(url: string): void | Promise<void>;
 }
 
 /**

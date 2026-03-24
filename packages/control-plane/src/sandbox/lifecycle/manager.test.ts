@@ -78,6 +78,7 @@ function createMockSandbox(
     code_server_url: null,
     code_server_password: null,
     vnc_url: null,
+    dev_server_url: null,
     created_at: Date.now() - 60000,
     spawn_failure_count: 0,
     last_spawn_failure: 0,
@@ -177,6 +178,12 @@ function createMockStorage(
       calls.push(`updateSandboxVncUrl:${url}`);
       if (sandbox) {
         sandbox.vnc_url = url;
+      }
+    }),
+    updateSandboxDevServerUrl: vi.fn(async (url: string) => {
+      calls.push(`updateSandboxDevServerUrl:${url}`);
+      if (sandbox) {
+        sandbox.dev_server_url = url;
       }
     }),
   };

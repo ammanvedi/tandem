@@ -66,6 +66,7 @@ function createSandbox(overrides: Partial<SandboxRow> = {}): SandboxRow {
     code_server_url: null,
     code_server_password: null,
     vnc_url: null,
+    dev_server_url: null,
     created_at: 1,
     ...overrides,
   };

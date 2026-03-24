@@ -564,6 +564,9 @@ export class SessionDO extends DurableObject<Env> {
       updateSandboxVncUrl: async (url) => {
         this.repository.updateSandboxVncUrl(url);
       },
+      updateSandboxDevServerUrl: async (url) => {
+        this.repository.updateSandboxDevServerUrl(url);
+      },
     };
 
     // Broadcaster adapter

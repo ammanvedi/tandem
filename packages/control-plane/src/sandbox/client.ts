@@ -50,6 +50,7 @@ export interface CreateSandboxResponse {
   codeServerUrl?: string;
   codeServerPassword?: string;
   vncUrl?: string;
+  devServerUrl?: string;
 }
 
 export interface RestoreSandboxRequest {
@@ -77,6 +78,7 @@ export interface RestoreSandboxResponse {
   codeServerUrl?: string;
   codeServerPassword?: string;
   vncUrl?: string;
+  devServerUrl?: string;
 }
 
 export interface SnapshotSandboxRequest {
