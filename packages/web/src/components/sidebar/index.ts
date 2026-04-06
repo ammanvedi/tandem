@@ -6,3 +6,5 @@ export { FilesChangedSection } from "./files-changed-section";
 export { CodeServerSection } from "./code-server-section";
 export { VncSection } from "./vnc-section";
 export { DevServerSection } from "./dev-server-section";
+export { MuxSection } from "./mux-section";
+export { SshSection } from "./ssh-section";

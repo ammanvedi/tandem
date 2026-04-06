@@ -1,10 +1,11 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import type { SessionCategory } from "@open-inspect/shared";
 import { useSidebarContext } from "@/components/sidebar-layout";
 import { formatModelNameLower } from "@/lib/format";
 import { SHORTCUT_LABELS } from "@/lib/keyboard-shortcuts";
@@ -33,9 +34,17 @@ const LAST_SELECTED_REPO_STORAGE_KEY = "open-inspect-last-selected-repo";
 const LAST_SELECTED_MODEL_STORAGE_KEY = "open-inspect-last-selected-model";
 const LAST_SELECTED_REASONING_EFFORT_STORAGE_KEY = "open-inspect-last-selected-reasoning-effort";
 
+const VALID_CATEGORIES: SessionCategory[] = ["idea", "product", "chat"];
+
 export default function Home() {
   const { data: session } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get("category");
+  const category: SessionCategory =
+    categoryParam && VALID_CATEGORIES.includes(categoryParam as SessionCategory)
+      ? (categoryParam as SessionCategory)
+      : "chat";
   const { repos, loading: loadingRepos } = useRepos();
   const [selectedRepo, setSelectedRepo] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
@@ -143,6 +152,7 @@ export default function Home() {
             model: selectedModel,
             reasoningEffort,
             branch: selectedBranch || undefined,
+            category,
           }),
           signal: abortController.signal,
         });
@@ -177,7 +187,7 @@ export default function Home() {
 
     sessionCreationPromise.current = promise;
     return promise;
-  }, [selectedRepo, selectedModel, reasoningEffort, selectedBranch, pendingSessionId]);
+  }, [selectedRepo, selectedModel, reasoningEffort, selectedBranch, pendingSessionId, category]);
 
   // Reset selections when model preferences change (only after hydration)
   useEffect(() => {
@@ -286,6 +296,7 @@ export default function Home() {
       error={error}
       handleSubmit={handleSubmit}
       modelOptions={enabledModelOptions}
+      category={category}
     />
   );
 }
@@ -311,6 +322,7 @@ function HomeContent({
   error,
   handleSubmit,
   modelOptions,
+  category,
 }: {
   isAuthenticated: boolean;
   repos: Repo[];
@@ -332,6 +344,7 @@ function HomeContent({
   error: string;
   handleSubmit: (e: React.FormEvent) => void;
   modelOptions: ModelCategory[];
+  category: SessionCategory;
 }) {
   const { isOpen, toggle } = useSidebarContext();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -397,7 +410,13 @@ function HomeContent({
                     value={prompt}
                     onChange={(e) => handlePromptChange(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="What do you want to build?"
+                    placeholder={
+                      category === "idea"
+                        ? "Describe your idea..."
+                        : category === "product"
+                          ? "What do you want to build?"
+                          : "What do you want to discuss?"
+                    }
                     disabled={creating}
                     className="w-full resize-none bg-transparent px-4 pt-4 pb-12 focus:outline-none text-foreground placeholder:text-secondary-foreground disabled:opacity-50"
                     rows={3}
@@ -514,7 +533,7 @@ function HomeContent({
 
                   {/* Right side - Agent label */}
                   <span className="hidden sm:inline text-sm text-muted-foreground">
-                    build agent
+                    {category === "idea" ? "idea" : category === "product" ? "build agent" : "chat"}
                   </span>
                 </div>
               </div>

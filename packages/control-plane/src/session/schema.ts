@@ -25,8 +25,11 @@ CREATE TABLE IF NOT EXISTS session (
   parent_session_id TEXT,                           -- Parent session ID (NULL for top-level)
   spawn_source TEXT NOT NULL DEFAULT 'user',        -- 'user' or 'agent'
   spawn_depth INTEGER NOT NULL DEFAULT 0,           -- 0 for top-level, parent.depth + 1 for children
+  category TEXT NOT NULL DEFAULT 'chat',            -- 'idea', 'product', 'chat'
+  tags TEXT DEFAULT '[]',                           -- JSON array of tag strings
   code_server_enabled INTEGER NOT NULL DEFAULT 0,   -- 0 = disabled, 1 = enabled (opt-in)
   vnc_enabled INTEGER NOT NULL DEFAULT 1,           -- 0 = disabled, 1 = enabled (default on)
+  mux_enabled INTEGER NOT NULL DEFAULT 1,           -- 0 = disabled, 1 = enabled (default on)
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -107,6 +110,9 @@ CREATE TABLE IF NOT EXISTS sandbox (
   code_server_password TEXT,                        -- Code-server password (rotates on each wake/restore)
   vnc_url TEXT,                                     -- noVNC tunnel URL (rotates on wake/restore)
   dev_server_url TEXT,                              -- Dev server tunnel URL (rotates on wake/restore)
+  ssh_host TEXT,                                     -- SSH tunnel hostname (rotates on wake/restore)
+  ssh_port INTEGER,                                  -- SSH tunnel port (rotates on wake/restore)
+  ssh_password TEXT,                                 -- SSH password (rotates on wake/restore)
   created_at INTEGER NOT NULL
 );
 
@@ -374,6 +380,35 @@ export const MIGRATIONS: readonly SchemaMigration[] = [
     id: 30,
     description: "Add dev server URL to sandbox",
     run: `ALTER TABLE sandbox ADD COLUMN dev_server_url TEXT`,
+  },
+  {
+    id: 31,
+    description: "Add mux URL to sandbox",
+    run: `ALTER TABLE sandbox ADD COLUMN mux_url TEXT`,
+  },
+  {
+    id: 32,
+    description: "Add SSH tunnel fields to sandbox",
+    run: `
+      ALTER TABLE sandbox ADD COLUMN ssh_host TEXT;
+      ALTER TABLE sandbox ADD COLUMN ssh_port INTEGER;
+      ALTER TABLE sandbox ADD COLUMN ssh_password TEXT;
+    `,
+  },
+  {
+    id: 33,
+    description: "Add mux_enabled to session",
+    run: `ALTER TABLE session ADD COLUMN mux_enabled INTEGER NOT NULL DEFAULT 1`,
+  },
+  {
+    id: 34,
+    description: "Add category to session",
+    run: `ALTER TABLE session ADD COLUMN category TEXT NOT NULL DEFAULT 'chat'`,
+  },
+  {
+    id: 35,
+    description: "Add tags to session",
+    run: `ALTER TABLE session ADD COLUMN tags TEXT DEFAULT '[]'`,
   },
 ];
 

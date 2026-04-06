@@ -22,8 +22,11 @@ function createSession(overrides: Partial<SessionRow> = {}): SessionRow {
     parent_session_id: null,
     spawn_source: "user",
     spawn_depth: 0,
+    category: "chat" as const,
+    tags: "[]",
     code_server_enabled: 0,
     vnc_enabled: 1,
+    mux_enabled: 1,
     created_at: 1000,
     updated_at: 2000,
     ...overrides,
@@ -49,6 +52,10 @@ function createSandbox(overrides: Partial<SandboxRow> = {}): SandboxRow {
     code_server_password: null,
     vnc_url: null,
     dev_server_url: null,
+    mux_url: null,
+    ssh_host: null,
+    ssh_port: null,
+    ssh_password: null,
     created_at: 1,
     ...overrides,
   };
@@ -79,6 +86,9 @@ function createHandler() {
     createSandbox: vi.fn(),
     createParticipant: vi.fn(),
     updateSessionTitle: vi.fn(),
+    updateSessionBranch: vi.fn(),
+    updateSessionCategory: vi.fn(),
+    updateSessionTags: vi.fn(),
   };
   const getDurableObjectId = vi.fn(() => "session-do-id");
   const encryptToken = vi.fn();
@@ -211,6 +221,7 @@ describe("createSessionLifecycleHandler", () => {
       parentSessionId: "parent-1",
       spawnSource: "agent",
       spawnDepth: 1,
+      category: "chat",
       codeServerEnabled: false,
       vncEnabled: true,
       createdAt: 1234,

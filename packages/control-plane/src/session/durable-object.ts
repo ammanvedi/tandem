@@ -154,6 +154,8 @@ export class SessionDO extends DurableObject<Env> {
     createPr: (request) => this.pullRequestHandler.createPr(request),
     wsToken: (request) => this.wsTokenHandler.generateWsToken(request),
     updateTitle: (request) => this.sessionLifecycleHandler.updateTitle(request),
+    updateCategory: (request) => this.sessionLifecycleHandler.updateCategory(request),
+    updateTags: (request) => this.sessionLifecycleHandler.updateTags(request),
     archive: (request) => this.sessionLifecycleHandler.archive(request),
     unarchive: (request) => this.sessionLifecycleHandler.unarchive(request),
     verifySandboxToken: (request) => this.sandboxHandler.verifySandboxToken(request),
@@ -566,6 +568,12 @@ export class SessionDO extends DurableObject<Env> {
       },
       updateSandboxDevServerUrl: async (url) => {
         this.repository.updateSandboxDevServerUrl(url);
+      },
+      updateSandboxMuxUrl: async (url) => {
+        this.repository.updateSandboxMuxUrl(url);
+      },
+      updateSandboxSsh: async (host, port, password) => {
+        this.repository.updateSandboxSsh(host, port, password);
       },
     };
 
@@ -1484,6 +1492,10 @@ export class SessionDO extends DurableObject<Env> {
       codeServerPassword,
       vncUrl: sandbox?.vnc_url ?? null,
       devServerUrl: sandbox?.dev_server_url ?? null,
+      muxUrl: sandbox?.mux_url ?? null,
+      sshHost: sandbox?.ssh_host ?? null,
+      sshPort: sandbox?.ssh_port ?? null,
+      sshPassword: sandbox?.ssh_password ?? null,
     };
   }
 

@@ -1,4 +1,4 @@
-import type { SessionStatus, SpawnSource } from "@open-inspect/shared";
+import type { SessionStatus, SessionCategory, SpawnSource } from "@open-inspect/shared";
 
 export interface SessionEntry {
   id: string;
@@ -12,6 +12,8 @@ export interface SessionEntry {
   parentSessionId?: string | null;
   spawnSource?: SpawnSource;
   spawnDepth?: number;
+  category: SessionCategory;
+  tags: string[];
   automationId?: string | null;
   automationRunId?: string | null;
   createdAt: number;
@@ -30,6 +32,8 @@ interface SessionRow {
   parent_session_id: string | null;
   spawn_source: SpawnSource;
   spawn_depth: number;
+  category: SessionCategory;
+  tags: string; // JSON array
   automation_id: string | null;
   automation_run_id: string | null;
   created_at: number;
@@ -41,6 +45,7 @@ export interface ListSessionsOptions {
   excludeStatus?: SessionStatus;
   repoOwner?: string;
   repoName?: string;
+  category?: SessionCategory;
   limit?: number;
   offset?: number;
 }
@@ -49,6 +54,15 @@ export interface ListSessionsResult {
   sessions: SessionEntry[];
   total: number;
   hasMore: boolean;
+}
+
+function parseTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
 }
 
 function toEntry(row: SessionRow): SessionEntry {
@@ -64,6 +78,8 @@ function toEntry(row: SessionRow): SessionEntry {
     parentSessionId: row.parent_session_id,
     spawnSource: row.spawn_source,
     spawnDepth: row.spawn_depth,
+    category: row.category ?? "chat",
+    tags: parseTags(row.tags),
     automationId: row.automation_id,
     automationRunId: row.automation_run_id,
     createdAt: row.created_at,
@@ -77,8 +93,8 @@ export class SessionIndexStore {
   async create(session: SessionEntry): Promise<void> {
     await this.db
       .prepare(
-        `INSERT OR IGNORE INTO sessions (id, title, repo_owner, repo_name, model, reasoning_effort, base_branch, status, parent_session_id, spawn_source, spawn_depth, automation_id, automation_run_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR IGNORE INTO sessions (id, title, repo_owner, repo_name, model, reasoning_effort, base_branch, status, parent_session_id, spawn_source, spawn_depth, category, tags, automation_id, automation_run_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         session.id,
@@ -92,6 +108,8 @@ export class SessionIndexStore {
         session.parentSessionId ?? null,
         session.spawnSource ?? "user",
         session.spawnDepth ?? 0,
+        session.category ?? "chat",
+        JSON.stringify(session.tags ?? []),
         session.automationId ?? null,
         session.automationRunId ?? null,
         session.createdAt,
@@ -110,7 +128,15 @@ export class SessionIndexStore {
   }
 
   async list(options: ListSessionsOptions = {}): Promise<ListSessionsResult> {
-    const { status, excludeStatus, repoOwner, repoName, limit = 50, offset = 0 } = options;
+    const {
+      status,
+      excludeStatus,
+      repoOwner,
+      repoName,
+      category,
+      limit = 50,
+      offset = 0,
+    } = options;
 
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -133,6 +159,11 @@ export class SessionIndexStore {
     if (repoName) {
       conditions.push("repo_name = ?");
       params.push(repoName.toLowerCase());
+    }
+
+    if (category) {
+      conditions.push("category = ?");
+      params.push(category);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -176,6 +207,22 @@ export class SessionIndexStore {
       .bind(status, updatedAt, id, updatedAt)
       .run();
 
+    return (result.meta?.changes ?? 0) > 0;
+  }
+
+  async updateCategory(id: string, category: SessionCategory): Promise<boolean> {
+    const result = await this.db
+      .prepare("UPDATE sessions SET category = ?, updated_at = ? WHERE id = ?")
+      .bind(category, Date.now(), id)
+      .run();
+    return (result.meta?.changes ?? 0) > 0;
+  }
+
+  async updateTags(id: string, tags: string[]): Promise<boolean> {
+    const result = await this.db
+      .prepare("UPDATE sessions SET tags = ?, updated_at = ? WHERE id = ?")
+      .bind(JSON.stringify(tags), Date.now(), id)
+      .run();
     return (result.meta?.changes ?? 0) > 0;
   }
 

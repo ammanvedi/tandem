@@ -1,0 +1,14 @@
+/* Hide the left sidebar completely */
+[data-testid="left-sidebar"] {
+  display: none !important;
+}
+
+/* Give the main content full width */
+.mobile-main-content {
+  flex: 1 !important;
+}
+
+/* Hide the sidebar collapse button in the menu bar */
+[data-testid="left-sidebar-toggle"] {
+  display: none !important;
+}

@@ -1,0 +1,21 @@
+{
+	order replace_response after encode
+}
+
+:9090 {
+	handle /custom.css {
+		root * /app/sandbox_runtime/caddy
+		file_server
+	}
+
+	handle {
+		replace_response {
+			search "</head>"
+			replace "<script>if(!localStorage.getItem('launchBehavior'))localStorage.setItem('launchBehavior','\"last-workspace\"');localStorage.setItem('sidebarCollapsed','true');</script><link rel=\"stylesheet\" href=\"/custom.css\"/></head>"
+			type text/html
+		}
+		reverse_proxy localhost:3100 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+}

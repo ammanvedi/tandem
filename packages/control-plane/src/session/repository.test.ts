@@ -104,7 +104,11 @@ describe("SessionRepository", () => {
         null,
         "user",
         0,
+        "chat",
+        "[]",
         0,
+        0,
+        1,
         1000,
         2000,
       ]);

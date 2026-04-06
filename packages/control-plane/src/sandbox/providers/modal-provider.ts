@@ -74,6 +74,7 @@ export class ModalSandboxProvider implements SandboxProvider {
           branch: config.branch,
           codeServerEnabled: config.codeServerEnabled,
           vncEnabled: config.vncEnabled,
+          muxEnabled: config.muxEnabled,
         },
         config.correlation
       );
@@ -87,6 +88,10 @@ export class ModalSandboxProvider implements SandboxProvider {
         codeServerPassword: result.codeServerPassword,
         vncUrl: result.vncUrl,
         devServerUrl: result.devServerUrl,
+        muxUrl: result.muxUrl,
+        sshHost: result.sshHost,
+        sshPort: result.sshPort,
+        sshPassword: result.sshPassword,
       };
     } catch (error) {
       throw this.classifyError("Failed to create sandbox", error);
@@ -114,6 +119,7 @@ export class ModalSandboxProvider implements SandboxProvider {
           branch: config.branch,
           codeServerEnabled: config.codeServerEnabled,
           vncEnabled: config.vncEnabled,
+          muxEnabled: config.muxEnabled,
         },
         config.correlation
       );
@@ -127,6 +133,10 @@ export class ModalSandboxProvider implements SandboxProvider {
           codeServerPassword: result.codeServerPassword,
           vncUrl: result.vncUrl,
           devServerUrl: result.devServerUrl,
+          muxUrl: result.muxUrl,
+          sshHost: result.sshHost,
+          sshPort: result.sshPort,
+          sshPassword: result.sshPassword,
         };
       }
 

@@ -14,6 +14,8 @@ type SessionRow = {
   parent_session_id: string | null;
   spawn_source: "user" | "agent" | "automation";
   spawn_depth: number;
+  category: string;
+  tags: string;
   automation_id: string | null;
   automation_run_id: string | null;
   created_at: number;
@@ -125,6 +127,8 @@ class FakeD1Database {
         parentSessionId,
         spawnSource,
         spawnDepth,
+        category,
+        tags,
         automationId,
         automationRunId,
         createdAt,
@@ -141,6 +145,8 @@ class FakeD1Database {
         string | null,
         "user" | "agent" | "automation",
         number,
+        string,
+        string,
         string | null,
         string | null,
         number,
@@ -160,6 +166,8 @@ class FakeD1Database {
           parent_session_id: parentSessionId,
           spawn_source: spawnSource,
           spawn_depth: spawnDepth,
+          category,
+          tags,
           automation_id: automationId,
           automation_run_id: automationRunId,
           created_at: createdAt,
@@ -207,6 +215,26 @@ class FakeD1Database {
       return { meta: { changes: 0 } };
     }
 
+    if (/update sessions set category/i.test(normalized)) {
+      const [category, , id] = args as [string, number, string];
+      const row = this.rows.get(id);
+      if (row) {
+        (row as Record<string, unknown>).category = category;
+        return { meta: { changes: 1 } };
+      }
+      return { meta: { changes: 0 } };
+    }
+
+    if (/update sessions set tags/i.test(normalized)) {
+      const [tags, , id] = args as [string, number, string];
+      const row = this.rows.get(id);
+      if (row) {
+        (row as Record<string, unknown>).tags = tags;
+        return { meta: { changes: 1 } };
+      }
+      return { meta: { changes: 0 } };
+    }
+
     throw new Error(`Unexpected mutation query: ${query}`);
   }
 
@@ -248,6 +276,11 @@ class FakeD1Database {
       if (conditions.includes("repo_name = ?")) {
         const nameVal = args[argIdx++] as string;
         rows = rows.filter((r) => r.repo_name === nameVal);
+      }
+
+      if (conditions.includes("category = ?")) {
+        const categoryVal = args[argIdx++] as string;
+        rows = rows.filter((r) => (r as Record<string, unknown>).category === categoryVal);
       }
     }
 
@@ -291,6 +324,8 @@ function makeSession(overrides: Partial<SessionEntry> = {}): SessionEntry {
     reasoningEffort: null,
     baseBranch: null,
     status: "created",
+    category: "chat",
+    tags: [],
     createdAt: 1000,
     updatedAt: 1000,
     ...overrides,

@@ -168,6 +168,10 @@ function createSandboxRow(modalSandboxId: string): SandboxRow {
     code_server_password: null,
     vnc_url: null,
     dev_server_url: null,
+    mux_url: null,
+    ssh_host: null,
+    ssh_port: null,
+    ssh_password: null,
     created_at: Date.now(),
   };
 }

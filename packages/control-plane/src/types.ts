@@ -27,6 +27,7 @@ export type {
   SandboxEvent,
   SandboxStatus,
   ServerMessage,
+  SessionCategory,
   SessionState,
   SessionStatus,
 } from "@open-inspect/shared";

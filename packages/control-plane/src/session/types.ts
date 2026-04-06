@@ -5,6 +5,7 @@
 import type {
   Attachment,
   SessionStatus,
+  SessionCategory,
   SandboxStatus,
   GitSyncStatus,
   MessageStatus,
@@ -36,8 +37,11 @@ export interface SessionRow {
   parent_session_id: string | null;
   spawn_source: SpawnSource;
   spawn_depth: number;
+  category: SessionCategory;
+  tags: string; // JSON array of strings
   code_server_enabled: number; // 0 = disabled (default), 1 = enabled
   vnc_enabled: number; // 0 = disabled, 1 = enabled (default)
+  mux_enabled: number; // 0 = disabled, 1 = enabled (default)
   created_at: number;
   updated_at: number;
 }
@@ -108,6 +112,10 @@ export interface SandboxRow {
   code_server_password: string | null;
   vnc_url: string | null;
   dev_server_url: string | null;
+  mux_url: string | null;
+  ssh_host: string | null;
+  ssh_port: number | null;
+  ssh_password: string | null;
   created_at: number;
 }
 

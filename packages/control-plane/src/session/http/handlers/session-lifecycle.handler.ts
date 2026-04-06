@@ -1,6 +1,12 @@
 import type { Logger } from "../../../logger";
 import type { ParticipantRow, SandboxRow, SessionRow } from "../../types";
-import type { SandboxStatus, ServerMessage, SessionStatus, SpawnSource } from "../../../types";
+import type {
+  SandboxStatus,
+  ServerMessage,
+  SessionStatus,
+  SessionCategory,
+  SpawnSource,
+} from "../../../types";
 import type { SessionRepository } from "../../repository";
 import { getValidModelOrDefault, isValidModel } from "../../../utils/models";
 
@@ -30,12 +36,20 @@ interface InitRequest {
   spawnDepth?: number;
   codeServerEnabled?: boolean;
   vncEnabled?: boolean;
+  category?: SessionCategory;
+  autoBranchName?: string;
 }
 
 export interface SessionLifecycleHandlerDeps {
   repository: Pick<
     SessionRepository,
-    "upsertSession" | "createSandbox" | "createParticipant" | "updateSessionTitle"
+    | "upsertSession"
+    | "createSandbox"
+    | "createParticipant"
+    | "updateSessionTitle"
+    | "updateSessionBranch"
+    | "updateSessionCategory"
+    | "updateSessionTags"
   >;
   getDurableObjectId: () => string;
   tokenEncryptionKey?: string;
@@ -61,6 +75,8 @@ export interface SessionLifecycleHandler {
   init: (request: Request) => Promise<Response>;
   getState: () => Response;
   updateTitle: (request: Request) => Promise<Response>;
+  updateCategory: (request: Request) => Promise<Response>;
+  updateTags: (request: Request) => Promise<Response>;
   archive: (request: Request) => Promise<Response>;
   unarchive: (request: Request) => Promise<Response>;
   cancel: () => Promise<Response>;
@@ -118,11 +134,16 @@ export function createSessionLifecycleHandler(
         parentSessionId: body.parentSessionId ?? null,
         spawnSource: body.spawnSource ?? "user",
         spawnDepth: body.spawnDepth ?? 0,
+        category: body.category ?? "chat",
         codeServerEnabled: body.codeServerEnabled ?? false,
         vncEnabled: body.vncEnabled ?? true,
         createdAt: now,
         updatedAt: now,
       });
+
+      if (body.autoBranchName) {
+        deps.repository.updateSessionBranch(sessionId, body.autoBranchName);
+      }
 
       const sandboxId = deps.generateId();
       deps.repository.createSandbox({
@@ -229,6 +250,53 @@ export function createSessionLifecycleHandler(
       });
 
       return Response.json({ title: body.title });
+    },
+
+    async updateCategory(request: Request): Promise<Response> {
+      const session = deps.getSession();
+      if (!session) {
+        return Response.json({ error: "Session not found" }, { status: 404 });
+      }
+
+      let body: { category?: SessionCategory };
+      try {
+        body = (await request.json()) as { category?: SessionCategory };
+      } catch {
+        return Response.json({ error: "Invalid request body" }, { status: 400 });
+      }
+
+      const validCategories: SessionCategory[] = ["idea", "product", "chat"];
+      if (!body.category || !validCategories.includes(body.category)) {
+        return Response.json({ error: "Invalid category" }, { status: 400 });
+      }
+
+      const now = deps.now();
+      deps.repository.updateSessionCategory(session.id, body.category, now);
+
+      return Response.json({ category: body.category, updatedAt: now });
+    },
+
+    async updateTags(request: Request): Promise<Response> {
+      const session = deps.getSession();
+      if (!session) {
+        return Response.json({ error: "Session not found" }, { status: 404 });
+      }
+
+      let body: { tags?: string[] };
+      try {
+        body = (await request.json()) as { tags?: string[] };
+      } catch {
+        return Response.json({ error: "Invalid request body" }, { status: 400 });
+      }
+
+      if (!Array.isArray(body.tags) || !body.tags.every((t) => typeof t === "string")) {
+        return Response.json({ error: "tags must be an array of strings" }, { status: 400 });
+      }
+
+      const now = deps.now();
+      deps.repository.updateSessionTags(session.id, body.tags, now);
+
+      return Response.json({ tags: body.tags, updatedAt: now });
     },
 
     async archive(request: Request): Promise<Response> {

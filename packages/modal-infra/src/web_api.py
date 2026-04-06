@@ -163,6 +163,7 @@ async def api_create_sandbox(
             code_server_enabled=bool(request.get("code_server_enabled", False)),
             vnc_enabled=bool(request.get("vnc_enabled", True)),
             dev_server_enabled=bool(request.get("dev_server_enabled", True)),
+            mux_enabled=bool(request.get("mux_enabled", False)),
         )
 
         handle = await manager.create_sandbox(config)
@@ -178,6 +179,10 @@ async def api_create_sandbox(
                 "code_server_password": handle.code_server_password,
                 "vnc_url": handle.vnc_url,
                 "dev_server_url": handle.dev_server_url,
+                "mux_url": handle.mux_url,
+                "ssh_host": handle.ssh_host,
+                "ssh_port": handle.ssh_port,
+                "ssh_password": handle.ssh_password,
             },
         }
     except Exception as e:
@@ -526,6 +531,7 @@ async def api_restore_sandbox(
         code_server_enabled = bool(request.get("code_server_enabled", False))
         vnc_enabled = bool(request.get("vnc_enabled", True))
         dev_server_enabled = bool(request.get("dev_server_enabled", True))
+        mux_enabled = bool(request.get("mux_enabled", False))
 
         # Restore sandbox from snapshot
         handle = await manager.restore_from_snapshot(
@@ -540,6 +546,7 @@ async def api_restore_sandbox(
             code_server_enabled=code_server_enabled,
             vnc_enabled=vnc_enabled,
             dev_server_enabled=dev_server_enabled,
+            mux_enabled=mux_enabled,
         )
 
         return {
@@ -552,6 +559,10 @@ async def api_restore_sandbox(
                 "code_server_password": handle.code_server_password,
                 "vnc_url": handle.vnc_url,
                 "dev_server_url": handle.dev_server_url,
+                "mux_url": handle.mux_url,
+                "ssh_host": handle.ssh_host,
+                "ssh_port": handle.ssh_port,
+                "ssh_password": handle.ssh_password,
             },
         }
     except HTTPException as e:

@@ -50,8 +50,11 @@ function createMockSession(overrides: Partial<SessionRow> = {}): SessionRow {
     parent_session_id: null,
     spawn_source: "user" as const,
     spawn_depth: 0,
+    category: "chat" as const,
+    tags: "[]",
     code_server_enabled: 0,
     vnc_enabled: 1,
+    mux_enabled: 1,
     created_at: Date.now() - 60000,
     updated_at: Date.now(),
     ...overrides,
@@ -79,6 +82,10 @@ function createMockSandbox(
     code_server_password: null,
     vnc_url: null,
     dev_server_url: null,
+    mux_url: null,
+    ssh_host: null,
+    ssh_port: null,
+    ssh_password: null,
     created_at: Date.now() - 60000,
     spawn_failure_count: 0,
     last_spawn_failure: 0,
@@ -184,6 +191,20 @@ function createMockStorage(
       calls.push(`updateSandboxDevServerUrl:${url}`);
       if (sandbox) {
         sandbox.dev_server_url = url;
+      }
+    }),
+    updateSandboxMuxUrl: vi.fn(async (url: string) => {
+      calls.push(`updateSandboxMuxUrl:${url}`);
+      if (sandbox) {
+        sandbox.mux_url = url;
+      }
+    }),
+    updateSandboxSsh: vi.fn(async (host: string, port: number, password: string) => {
+      calls.push(`updateSandboxSsh:${host}:${port}`);
+      if (sandbox) {
+        sandbox.ssh_host = host;
+        sandbox.ssh_port = port;
+        sandbox.ssh_password = password;
       }
     }),
   };

@@ -40,6 +40,7 @@ export interface CreateSandboxRequest {
   branch?: string;
   codeServerEnabled?: boolean;
   vncEnabled?: boolean;
+  muxEnabled?: boolean;
 }
 
 export interface CreateSandboxResponse {
@@ -51,6 +52,10 @@ export interface CreateSandboxResponse {
   codeServerPassword?: string;
   vncUrl?: string;
   devServerUrl?: string;
+  muxUrl?: string;
+  sshHost?: string;
+  sshPort?: number;
+  sshPassword?: string;
 }
 
 export interface RestoreSandboxRequest {
@@ -68,6 +73,7 @@ export interface RestoreSandboxRequest {
   branch?: string;
   codeServerEnabled?: boolean;
   vncEnabled?: boolean;
+  muxEnabled?: boolean;
 }
 
 export interface RestoreSandboxResponse {
@@ -79,6 +85,10 @@ export interface RestoreSandboxResponse {
   codeServerPassword?: string;
   vncUrl?: string;
   devServerUrl?: string;
+  muxUrl?: string;
+  sshHost?: string;
+  sshPort?: number;
+  sshPassword?: string;
 }
 
 export interface SnapshotSandboxRequest {
@@ -258,6 +268,7 @@ export class ModalClient {
           branch: request.branch || null,
           code_server_enabled: request.codeServerEnabled ?? false,
           vnc_enabled: request.vncEnabled ?? true,
+          mux_enabled: request.muxEnabled ?? true,
         }),
       });
 
@@ -277,6 +288,10 @@ export class ModalClient {
         code_server_password?: string;
         vnc_url?: string;
         dev_server_url?: string;
+        mux_url?: string;
+        ssh_host?: string;
+        ssh_port?: number;
+        ssh_password?: string;
       }>;
 
       if (!result.success || !result.data) {
@@ -293,6 +308,10 @@ export class ModalClient {
         codeServerPassword: result.data.code_server_password,
         vncUrl: result.data.vnc_url,
         devServerUrl: result.data.dev_server_url,
+        muxUrl: result.data.mux_url,
+        sshHost: result.data.ssh_host,
+        sshPort: result.data.ssh_port,
+        sshPassword: result.data.ssh_password,
       };
     } finally {
       log.info("modal.request", {
@@ -343,6 +362,7 @@ export class ModalClient {
           timeout_seconds: request.timeoutSeconds || null,
           code_server_enabled: request.codeServerEnabled ?? false,
           vnc_enabled: request.vncEnabled ?? true,
+          mux_enabled: request.muxEnabled ?? true,
         }),
       });
 
@@ -360,6 +380,10 @@ export class ModalClient {
         code_server_password?: string;
         vnc_url?: string;
         dev_server_url?: string;
+        mux_url?: string;
+        ssh_host?: string;
+        ssh_port?: number;
+        ssh_password?: string;
       }>;
 
       if (!result.success) {
@@ -375,6 +399,10 @@ export class ModalClient {
         codeServerPassword: result.data?.code_server_password,
         vncUrl: result.data?.vnc_url,
         devServerUrl: result.data?.dev_server_url,
+        muxUrl: result.data?.mux_url,
+        sshHost: result.data?.ssh_host,
+        sshPort: result.data?.ssh_port,
+        sshPassword: result.data?.ssh_password,
       };
     } finally {
       log.info("modal.request", {

@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import time
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import httpx
 
-from .constants import CODE_SERVER_PORT, DEV_SERVER_PORT, NOVNC_PORT, VNC_PORT
+from .constants import CODE_SERVER_PORT, DEV_SERVER_PORT, MUX_INTERNAL_PORT, MUX_PORT, NOVNC_PORT, VNC_PORT
 from .log_config import configure_logging, get_logger
 
 configure_logging()
@@ -60,6 +61,11 @@ class SandboxSupervisor:
         self.novnc_process: asyncio.subprocess.Process | None = None
         self.fluxbox_process: asyncio.subprocess.Process | None = None
         self.dev_server_process: asyncio.subprocess.Process | None = None
+        self.mux_process: asyncio.subprocess.Process | None = None
+        self.caddy_process: asyncio.subprocess.Process | None = None
+        self.ssh_process: asyncio.subprocess.Process | None = None
+        self.mux_auth_token = secrets.token_urlsafe(32)
+        self.mux_workspace_id: str | None = None
         self.shutdown_event = asyncio.Event()
         self.git_sync_complete = asyncio.Event()
         self.opencode_ready = asyncio.Event()
@@ -349,6 +355,75 @@ class SandboxSupervisor:
         except Exception as e:
             self.log.warn("openai_oauth.setup_error", exc=e)
 
+    async def _set_root_password(self, password: str) -> None:
+        """Set root password, falling back to /etc/shadow if chpasswd is unavailable."""
+        if shutil.which("chpasswd"):
+            proc = await asyncio.create_subprocess_exec(
+                "chpasswd",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr_data = await proc.communicate(input=f"root:{password}\n".encode())
+            if proc.returncode != 0:
+                raise RuntimeError(f"chpasswd failed (rc={proc.returncode}): {stderr_data.decode()}")
+            return
+
+        # Fallback for repo images built before passwd package was added (pre-v49):
+        # hash the password with SHA-512 crypt and write directly to /etc/shadow.
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning, module="crypt")
+            import crypt
+
+            hashed = crypt.crypt(password, crypt.mksalt(crypt.METHOD_SHA512))
+        shadow_hash = hashed
+        shadow = Path("/etc/shadow")
+        lines = shadow.read_text().splitlines()
+        new_lines = []
+        for line in lines:
+            if line.startswith("root:"):
+                parts = line.split(":")
+                parts[1] = shadow_hash
+                new_lines.append(":".join(parts))
+            else:
+                new_lines.append(line)
+        shadow.write_text("\n".join(new_lines) + "\n")
+
+    async def start_ssh_server(self) -> None:
+        """Start SSH server for remote access via username/password."""
+        password = os.environ.get("SSH_PASSWORD")
+        if not password:
+            self.log.info("ssh.skip", reason="no_password")
+            return
+
+        os.makedirs("/run/sshd", exist_ok=True)
+
+        await self._set_root_password(password)
+
+        self.ssh_process = await asyncio.create_subprocess_exec(
+            "/usr/sbin/sshd",
+            "-D",
+            "-e",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        asyncio.create_task(self._forward_ssh_logs())
+        self.log.info("ssh.started", port=22)
+
+    async def _forward_ssh_logs(self) -> None:
+        """Forward sshd stdout/stderr to supervisor stdout."""
+        if not self.ssh_process or not self.ssh_process.stdout:
+            return
+
+        try:
+            async for line in self.ssh_process.stdout:
+                self.log.info("ssh.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("ssh.log_forward_error", exc=e)
+
     async def start_code_server(self) -> None:
         """Start code-server for browser-based VS Code editing."""
         password = os.environ.get("CODE_SERVER_PASSWORD")
@@ -388,6 +463,132 @@ class SandboxSupervisor:
                 self.log.info("code_server.stdout", line=line.decode().rstrip())
         except Exception as e:
             self.log.warn("code_server.log_forward_error", exc=e)
+
+    async def start_mux(self) -> None:
+        """Start mux parallel agent server and auto-create a workspace.
+
+        Gated on MUX_ENABLED env var (default "false"). Starts mux on
+        localhost only; Caddy handles external-facing traffic.
+        """
+        if os.environ.get("MUX_ENABLED", "false").lower() != "true":
+            self.log.info("mux.skip", reason="not_enabled")
+            return
+
+        workdir = self.workspace_path
+        if self.repo_path.exists() and (self.repo_path / ".git").exists():
+            workdir = self.repo_path
+
+        self.mux_process = await asyncio.create_subprocess_exec(
+            "mux", "server",
+            "--host", "127.0.0.1",
+            "--port", str(MUX_INTERNAL_PORT),
+            "--auth-token", self.mux_auth_token,
+            "--allow-http-origin",
+            "--add-project", str(workdir),
+            cwd=workdir,
+            env=os.environ.copy(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        asyncio.create_task(self._forward_mux_logs())
+        self.log.info("mux.started", port=MUX_INTERNAL_PORT)
+
+        # Wait for mux health check
+        MUX_HEALTH_TIMEOUT_SECONDS = 30.0
+        health_url = f"http://localhost:{MUX_INTERNAL_PORT}/health"
+        start_time = time.time()
+        async with httpx.AsyncClient() as client:
+            while time.time() - start_time < MUX_HEALTH_TIMEOUT_SECONDS:
+                if self.shutdown_event.is_set():
+                    return
+                try:
+                    resp = await client.get(health_url, timeout=2.0)
+                    if resp.status_code == 200:
+                        break
+                except httpx.ConnectError:
+                    pass
+                except Exception as e:
+                    self.log.debug("mux.health_check_error", exc=e)
+                await asyncio.sleep(0.5)
+            else:
+                self.log.error("mux.health_timeout")
+                return
+
+        self.log.info("mux.healthy")
+
+        # Auto-create workspace via mux API
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"http://localhost:{MUX_INTERNAL_PORT}/api/workspace.create",
+                    headers={
+                        "Authorization": f"Bearer {self.mux_auth_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "projectPath": str(workdir),
+                        "branchName": self.base_branch,
+                        "trunkBranch": self.base_branch,
+                        "title": f"{self.repo_owner}/{self.repo_name}",
+                    },
+                    timeout=10.0,
+                )
+                result = resp.json()
+                if result.get("success") and result.get("metadata", {}).get("id"):
+                    self.mux_workspace_id = result["metadata"]["id"]
+                    self.log.info("mux.workspace_created", workspace_id=self.mux_workspace_id)
+                else:
+                    self.log.warn("mux.workspace_create_failed", response=result)
+        except Exception as e:
+            self.log.warn("mux.workspace_create_error", exc=e)
+
+    async def start_caddy(self) -> None:
+        """Start Caddy reverse proxy in front of mux.
+
+        Caddy injects custom CSS and localStorage script into mux HTML
+        responses via the replace-response plugin. Only started when
+        mux is enabled and healthy.
+        """
+        if os.environ.get("MUX_ENABLED", "false").lower() != "true":
+            return
+
+        caddyfile_template = Path("/app/sandbox_runtime/caddy/Caddyfile.template")
+        if not caddyfile_template.exists():
+            self.log.warn("caddy.skip", reason="no_caddyfile_template")
+            return
+
+        # Write rendered Caddyfile (template is static, no substitution needed)
+        caddyfile_path = Path("/tmp/Caddyfile")
+        shutil.copy(caddyfile_template, caddyfile_path)
+
+        self.caddy_process = await asyncio.create_subprocess_exec(
+            "caddy", "run",
+            "--config", str(caddyfile_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        asyncio.create_task(self._forward_caddy_logs())
+        self.log.info("caddy.started", port=MUX_PORT)
+
+    async def _forward_mux_logs(self) -> None:
+        """Forward mux server stdout to supervisor logs."""
+        if not self.mux_process or not self.mux_process.stdout:
+            return
+        try:
+            async for line in self.mux_process.stdout:
+                self.log.info("mux.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("mux.log_forward_error", exc=e)
+
+    async def _forward_caddy_logs(self) -> None:
+        """Forward Caddy stdout to supervisor logs."""
+        if not self.caddy_process or not self.caddy_process.stdout:
+            return
+        try:
+            async for line in self.caddy_process.stdout:
+                self.log.info("caddy.stdout", line=line.decode().rstrip())
+        except Exception as e:
+            self.log.warn("caddy.log_forward_error", exc=e)
 
     async def start_vnc_display(self) -> None:
         """Start Xvfb virtual display, fluxbox WM, x11vnc, and noVNC.
@@ -736,6 +937,8 @@ class SandboxSupervisor:
         code_server_restart_count = 0
         vnc_restart_count = 0
         dev_server_restart_count = 0
+        mux_restart_count = 0
+        caddy_restart_count = 0
 
         while not self.shutdown_event.is_set():
             # Check OpenCode process
@@ -879,11 +1082,51 @@ class SandboxSupervisor:
                     self.log.warn("vnc.max_restarts", restart_count=vnc_restart_count)
                     self.vnc_process = None
 
+            # Check mux server — non-fatal, best-effort restart
+            if self.mux_process and self.mux_process.returncode is not None:
+                mux_restart_count += 1
+                self.log.warn(
+                    "mux.crash",
+                    exit_code=self.mux_process.returncode,
+                    restart_count=mux_restart_count,
+                )
+                if mux_restart_count <= self.MAX_RESTARTS:
+                    delay = min(self.BACKOFF_BASE**mux_restart_count, self.BACKOFF_MAX)
+                    await asyncio.sleep(delay)
+                    try:
+                        await self.start_mux()
+                    except Exception as e:
+                        self.log.warn("mux.restart_failed", exc=e)
+                        self.mux_process = None
+                else:
+                    self.log.warn("mux.max_restarts", restart_count=mux_restart_count)
+                    self.mux_process = None
+
+            # Check Caddy — non-fatal, best-effort restart
+            if self.caddy_process and self.caddy_process.returncode is not None:
+                caddy_restart_count += 1
+                self.log.warn(
+                    "caddy.crash",
+                    exit_code=self.caddy_process.returncode,
+                    restart_count=caddy_restart_count,
+                )
+                if caddy_restart_count <= self.MAX_RESTARTS:
+                    delay = min(self.BACKOFF_BASE**caddy_restart_count, self.BACKOFF_MAX)
+                    await asyncio.sleep(delay)
+                    try:
+                        await self.start_caddy()
+                    except Exception as e:
+                        self.log.warn("caddy.restart_failed", exc=e)
+                        self.caddy_process = None
+                else:
+                    self.log.warn("caddy.max_restarts", restart_count=caddy_restart_count)
+                    self.caddy_process = None
+
             await asyncio.sleep(1.0)
 
     async def _report_fatal_error(self, message: str) -> None:
         """Report a fatal error to the control plane."""
-        self.log.error("supervisor.fatal", message=message)
+        self.log.error("supervisor.fatal", error_message=message)
 
         if not self.control_plane_url:
             return
@@ -1117,14 +1360,25 @@ class SandboxSupervisor:
                 await self.shutdown_event.wait()
                 return
 
-            # Phase 3.5: Start dev server (auto-detect npm run dev)
+            # Phase 3.5: Start SSH server (password-based access, non-fatal)
+            try:
+                await self.start_ssh_server()
+            except Exception as e:
+                self.log.warn("ssh.startup_failed", exc=e)
+                self.ssh_process = None
+
+            # Phase 3.6: Start dev server (auto-detect npm run dev)
             await self.start_dev_server()
 
-            # Phase 3.6: Start VNC display stack (Xvfb + fluxbox + x11vnc + noVNC)
+            # Phase 3.7: Start VNC display stack (Xvfb + fluxbox + x11vnc + noVNC)
             await self.start_vnc_display()
 
-            # Phase 3.7: Start code-server (non-blocking, no health check needed)
+            # Phase 3.8: Start code-server (non-blocking, no health check needed)
             await self.start_code_server()
+
+            # Phase 3.9: Start mux parallel agent server + Caddy reverse proxy
+            await self.start_mux()
+            await self.start_caddy()
 
             # Phase 4: Start OpenCode server (in repo directory)
             await self.start_opencode()
@@ -1185,6 +1439,14 @@ class SandboxSupervisor:
             except TimeoutError:
                 self.code_server_process.kill()
 
+        # Terminate SSH server
+        if self.ssh_process and self.ssh_process.returncode is None:
+            self.ssh_process.terminate()
+            try:
+                await asyncio.wait_for(self.ssh_process.wait(), timeout=5.0)
+            except TimeoutError:
+                self.ssh_process.kill()
+
         # Terminate dev server
         if self.dev_server_process and self.dev_server_process.returncode is None:
             self.dev_server_process.terminate()
@@ -1206,6 +1468,22 @@ class SandboxSupervisor:
                     await asyncio.wait_for(proc.wait(), timeout=3.0)
                 except TimeoutError:
                     proc.kill()
+
+        # Terminate Caddy
+        if self.caddy_process and self.caddy_process.returncode is None:
+            self.caddy_process.terminate()
+            try:
+                await asyncio.wait_for(self.caddy_process.wait(), timeout=3.0)
+            except TimeoutError:
+                self.caddy_process.kill()
+
+        # Terminate mux
+        if self.mux_process and self.mux_process.returncode is None:
+            self.mux_process.terminate()
+            try:
+                await asyncio.wait_for(self.mux_process.wait(), timeout=5.0)
+            except TimeoutError:
+                self.mux_process.kill()
 
         # Terminate OpenCode
         if self.opencode_process and self.opencode_process.returncode is None:

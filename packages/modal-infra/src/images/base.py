@@ -10,6 +10,7 @@ This image provides a complete development environment with:
 - Xvfb virtual display, x11vnc, noVNC for VNC-based browser viewing
 - Playwright with Chromium for browser automation
 - Sandbox entrypoint and bridge code
+- Mux parallel agent server with Caddy reverse proxy
 """
 
 from pathlib import Path
@@ -34,8 +35,8 @@ AGENT_BROWSER_VERSION = "0.21.2"
 NOVNC_VERSION = "1.5.0"
 
 # Cache buster - change this to force Modal image rebuild
-# v46: add dev server auto-detect with port 3000 tunnel
-CACHE_BUSTER = "v46-dev-server-tunnel"
+# v49: add passwd pkg (chpasswd), fix non-fatal SSH startup
+CACHE_BUSTER = "v49-passwd-fix"
 
 # Base image with all development tools
 base_image = (
@@ -48,6 +49,8 @@ base_image = (
         "ca-certificates",
         "gnupg",
         "openssh-client",
+        "openssh-server",
+        "passwd",
         "jq",
         "unzip",  # Required for Bun installation
         # Shared libraries required by headless Chromium
@@ -66,6 +69,12 @@ base_image = (
         "libasound2",
         "libpango-1.0-0",
         "libcairo2",
+    )
+    # Configure SSH server for password-based access
+    .run_commands(
+        "mkdir -p /run/sshd",
+        "sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config",
+        "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
     )
     # Install GitHub CLI (for agent-direct GitHub interaction via gh API)
     .run_commands(
@@ -149,6 +158,18 @@ base_image = (
     .run_commands(
         "pip install playwright",
         "playwright install --with-deps chromium",
+    )
+    # Install mux parallel agent server
+    .run_commands(
+        "npm install -g mux@latest",
+        "mux --version || echo 'mux installed'",
+    )
+    # Install Caddy with replace-response plugin (custom build from Caddy download API)
+    .run_commands(
+        'curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64'
+        '&p=github.com/caddyserver/replace-response"'
+        " -o /usr/local/bin/caddy && chmod +x /usr/local/bin/caddy",
+        "caddy version",
     )
     # Create working directories
     .run_commands(

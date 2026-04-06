@@ -448,6 +448,8 @@ export class SchedulerDO extends DurableObject<Env> {
       status: "created",
       spawnSource: "automation",
       spawnDepth: 0,
+      category: "product",
+      tags: [],
       automationId: automation.id,
       automationRunId: runId,
       createdAt: now,

@@ -91,6 +91,10 @@ export interface SandboxStorage {
   updateSandboxVncUrl(url: string): void | Promise<void>;
   /** Update dev server URL on the sandbox row */
   updateSandboxDevServerUrl(url: string): void | Promise<void>;
+  /** Update mux URL on the sandbox row */
+  updateSandboxMuxUrl(url: string): void | Promise<void>;
+  /** Update SSH tunnel info on the sandbox row */
+  updateSandboxSsh(host: string, port: number, password: string): void | Promise<void>;
 }
 
 /**
@@ -375,6 +379,7 @@ export class SandboxLifecycleManager {
       // Create sandbox via provider
       const codeServerEnabled = session.code_server_enabled === 1;
       const vncEnabled = session.vnc_enabled === 1;
+      const muxEnabled = session.mux_enabled === 1;
       const createConfig: CreateSandboxConfig = {
         sessionId,
         sandboxId: expectedSandboxId,
@@ -391,6 +396,7 @@ export class SandboxLifecycleManager {
         branch: session.base_branch,
         codeServerEnabled,
         vncEnabled,
+        muxEnabled,
       };
 
       const result = await this.provider.createSandbox(createConfig);
@@ -419,6 +425,16 @@ export class SandboxLifecycleManager {
       // Store and broadcast dev server URL
       if (result.devServerUrl) {
         await this.storeAndBroadcastDevServer(result.devServerUrl);
+      }
+
+      // Store and broadcast mux URL
+      if (result.muxUrl) {
+        await this.storeAndBroadcastMux(result.muxUrl);
+      }
+
+      // Store and broadcast SSH tunnel info
+      if (result.sshHost && result.sshPort && result.sshPassword) {
+        await this.storeAndBroadcastSsh(result.sshHost, result.sshPort, result.sshPassword);
       }
 
       this.storage.updateSandboxStatus("connecting");
@@ -517,6 +533,7 @@ export class SandboxLifecycleManager {
 
       const codeServerEnabled = session.code_server_enabled === 1;
       const vncEnabled = session.vnc_enabled === 1;
+      const muxEnabled = session.mux_enabled === 1;
       const result = await this.provider.restoreFromSnapshot({
         snapshotImageId,
         sessionId: session.session_name || session.id,
@@ -532,6 +549,7 @@ export class SandboxLifecycleManager {
         branch: session.base_branch,
         codeServerEnabled,
         vncEnabled,
+        muxEnabled,
       });
 
       if (result.success) {
@@ -559,6 +577,16 @@ export class SandboxLifecycleManager {
         // Store and broadcast dev server URL
         if (result.devServerUrl) {
           await this.storeAndBroadcastDevServer(result.devServerUrl);
+        }
+
+        // Store and broadcast mux URL
+        if (result.muxUrl) {
+          await this.storeAndBroadcastMux(result.muxUrl);
+        }
+
+        // Store and broadcast SSH tunnel info
+        if (result.sshHost && result.sshPort && result.sshPassword) {
+          await this.storeAndBroadcastSsh(result.sshHost, result.sshPort, result.sshPassword);
         }
 
         this.storage.updateSandboxStatus("connecting");
@@ -925,6 +953,26 @@ export class SandboxLifecycleManager {
     this.broadcaster.broadcast({
       type: "dev_server_info",
       url,
+    });
+  }
+
+  private async storeAndBroadcastMux(url: string): Promise<void> {
+    this.log.info("Storing and broadcasting mux info", { url });
+    await this.storage.updateSandboxMuxUrl(url);
+    this.broadcaster.broadcast({
+      type: "mux_info",
+      url,
+    });
+  }
+
+  private async storeAndBroadcastSsh(host: string, port: number, password: string): Promise<void> {
+    this.log.info("Storing and broadcasting SSH info", { host, port });
+    await this.storage.updateSandboxSsh(host, port, password);
+    this.broadcaster.broadcast({
+      type: "ssh_info",
+      host,
+      port,
+      password,
     });
   }
 

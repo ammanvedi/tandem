@@ -40,8 +40,11 @@ import {
   ErrorIcon,
   MonitorIcon,
   GlobeIcon,
+  BoxIcon,
 } from "@/components/ui/icons";
 import { getSafeExternalUrl } from "@/lib/urls";
+import { FloatingWindow } from "@/components/floating-window";
+import type { FloatingWindowToggles } from "@/components/session-right-sidebar";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
 
 type ToolCallEvent = Extract<SandboxEvent, { type: "tool_call" }>;
@@ -470,8 +473,9 @@ function SessionContent({
   const baseResolvedTitle = sessionState?.title ?? fallbackSessionInfo.title ?? fallbackRepoLabel;
 
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [isVncOpen, setIsVncOpen] = useState(true);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(true);
+  const [isVncOpen, setIsVncOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isMuxOpen, setIsMuxOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [title, setTitle] = useState(baseResolvedTitle);
   const [optimisticTitle, setOptimisticTitle] = useState<string | null>(null);
@@ -676,6 +680,23 @@ function SessionContent({
   const showTimelineSkeleton = events.length === 0 && (connecting || replaying);
   const safeVncUrl = getSafeExternalUrl(sessionState?.vncUrl);
   const safeDevServerUrl = getSafeExternalUrl(sessionState?.devServerUrl);
+  const safeMuxUrl = getSafeExternalUrl(sessionState?.muxUrl);
+
+  const toggleVnc = useCallback(() => setIsVncOpen((v) => !v), []);
+  const toggleDevServer = useCallback(() => setIsPreviewOpen((v) => !v), []);
+  const toggleMux = useCallback(() => setIsMuxOpen((v) => !v), []);
+
+  const floatingWindows: FloatingWindowToggles = useMemo(
+    () => ({
+      vncOpen: isVncOpen,
+      devServerOpen: isPreviewOpen,
+      muxOpen: isMuxOpen,
+      toggleVnc,
+      toggleDevServer,
+      toggleMux,
+    }),
+    [isVncOpen, isPreviewOpen, isMuxOpen, toggleVnc, toggleDevServer, toggleMux]
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -728,7 +749,7 @@ function SessionContent({
             {safeDevServerUrl && (
               <button
                 type="button"
-                onClick={() => setIsPreviewOpen((v) => !v)}
+                onClick={toggleDevServer}
                 className={`p-1.5 transition ${
                   isPreviewOpen
                     ? "text-accent hover:text-accent/80"
@@ -743,7 +764,7 @@ function SessionContent({
             {safeVncUrl && (
               <button
                 type="button"
-                onClick={() => setIsVncOpen((v) => !v)}
+                onClick={toggleVnc}
                 className={`p-1.5 transition ${
                   isVncOpen
                     ? "text-accent hover:text-accent/80"
@@ -753,6 +774,21 @@ function SessionContent({
                 aria-label={isVncOpen ? "Hide VNC display" : "Show VNC display"}
               >
                 <MonitorIcon className="w-4 h-4" />
+              </button>
+            )}
+            {safeMuxUrl && (
+              <button
+                type="button"
+                onClick={toggleMux}
+                className={`p-1.5 transition ${
+                  isMuxOpen
+                    ? "text-accent hover:text-accent/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                title={isMuxOpen ? "Hide Mux" : "Show Mux"}
+                aria-label={isMuxOpen ? "Hide Mux agent" : "Show Mux agent"}
+              >
+                <BoxIcon className="w-4 h-4" />
               </button>
             )}
             <button
@@ -797,34 +833,36 @@ function SessionContent({
         </div>
       )}
 
-      {/* Dev Server Preview */}
-      {safeDevServerUrl && isPreviewOpen && (
-        <div
-          className="flex-shrink-0 border-b border-border-muted bg-background relative"
-          style={{ height: 400 }}
-        >
-          <iframe
-            src={safeDevServerUrl}
-            className="w-full h-full border-0"
-            allow="clipboard-read; clipboard-write"
-            title="Dev Server Preview"
-          />
-        </div>
-      )}
-
-      {/* VNC Display */}
+      {/* Floating windows */}
       {safeVncUrl && isVncOpen && (
-        <div
-          className="flex-shrink-0 border-b border-border-muted bg-black relative"
-          style={{ height: 400 }}
-        >
-          <iframe
-            src={safeVncUrl}
-            className="w-full h-full border-0"
-            allow="clipboard-read; clipboard-write"
-            title="VNC Display"
-          />
-        </div>
+        <FloatingWindow
+          title="Display"
+          icon={<MonitorIcon className="w-4 h-4" />}
+          src={safeVncUrl}
+          defaultPosition={{ x: 60, y: 80 }}
+          defaultSize={{ width: 640, height: 480 }}
+          onClose={toggleVnc}
+        />
+      )}
+      {safeDevServerUrl && isPreviewOpen && (
+        <FloatingWindow
+          title="Preview"
+          icon={<GlobeIcon className="w-4 h-4" />}
+          src={safeDevServerUrl}
+          defaultPosition={{ x: 120, y: 120 }}
+          defaultSize={{ width: 520, height: 400 }}
+          onClose={toggleDevServer}
+        />
+      )}
+      {safeMuxUrl && isMuxOpen && (
+        <FloatingWindow
+          title="Mux"
+          icon={<BoxIcon className="w-4 h-4" />}
+          src={safeMuxUrl}
+          defaultPosition={{ x: 180, y: 100 }}
+          defaultSize={{ width: 720, height: 500 }}
+          onClose={toggleMux}
+        />
       )}
 
       {/* Main content */}
@@ -868,6 +906,7 @@ function SessionContent({
           participants={participants}
           events={events}
           artifacts={artifacts}
+          floatingWindows={floatingWindows}
         />
       </main>
 
@@ -919,6 +958,7 @@ function SessionContent({
                   participants={participants}
                   events={events}
                   artifacts={artifacts}
+                  floatingWindows={floatingWindows}
                 />
               </div>
             </div>
@@ -947,6 +987,7 @@ function SessionContent({
                   participants={participants}
                   events={events}
                   artifacts={artifacts}
+                  floatingWindows={floatingWindows}
                 />
               </div>
             </div>

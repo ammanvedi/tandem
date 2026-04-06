@@ -19,12 +19,18 @@ from dataclasses import dataclass
 
 import modal
 
-from sandbox_runtime.constants import CODE_SERVER_PORT, DEV_SERVER_PORT, NOVNC_PORT
+from sandbox_runtime.constants import (
+    CODE_SERVER_PORT,
+    DEV_SERVER_PORT,
+    MUX_PORT,
+    NOVNC_PORT,
+    SSH_PORT,
+)
 from sandbox_runtime.log_config import get_logger
 from sandbox_runtime.types import SandboxStatus, SessionConfig
 
 from ..app import app, llm_secrets
-from ..images.base import base_image
+from ..images.base import SANDBOX_RUNTIME_DIR, base_image
 
 log = get_logger("manager")
 
@@ -50,6 +56,7 @@ class SandboxConfig:
     code_server_enabled: bool = False  # Whether to start code-server in the sandbox
     vnc_enabled: bool = True  # Whether to start Xvfb + VNC display stack
     dev_server_enabled: bool = True  # Whether to expose dev server tunnel (port 3000)
+    mux_enabled: bool = False  # Whether to start mux parallel agent server
 
 
 @dataclass
@@ -66,6 +73,10 @@ class SandboxHandle:
     code_server_password: str | None = None
     vnc_url: str | None = None
     dev_server_url: str | None = None
+    mux_url: str | None = None
+    ssh_host: str | None = None
+    ssh_port: int | None = None
+    ssh_password: str | None = None
 
     def get_logs(self) -> str:
         """Get sandbox logs."""
@@ -175,6 +186,57 @@ class SandboxManager:
         return None
 
     @staticmethod
+    async def _resolve_mux_tunnel(
+        sandbox: modal.Sandbox, sandbox_id: str, retries: int = 3, backoff: float = 1.0
+    ) -> str | None:
+        """Resolve the mux (Caddy) tunnel URL from Modal, retrying on failure."""
+        for attempt in range(retries):
+            try:
+                loop = asyncio.get_running_loop()
+                tunnels = await loop.run_in_executor(None, sandbox.tunnels)
+                tunnel = tunnels[MUX_PORT]
+                log.info("mux.tunnel", sandbox_id=sandbox_id, url=tunnel.url)
+                return tunnel.url
+            except Exception as e:
+                log.warn(
+                    "mux.tunnel_error",
+                    sandbox_id=sandbox_id,
+                    attempt=attempt + 1,
+                    retries=retries,
+                    error=type(e).__name__,
+                    exc=e,
+                )
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff * (attempt + 1))
+        return None
+
+    @staticmethod
+    async def _resolve_ssh_tunnel(
+        sandbox: modal.Sandbox, sandbox_id: str, retries: int = 3, backoff: float = 1.0
+    ) -> tuple[str, int] | None:
+        """Resolve the SSH tunnel host/port from Modal, retrying on failure."""
+        for attempt in range(retries):
+            try:
+                loop = asyncio.get_running_loop()
+                tunnels = await loop.run_in_executor(None, sandbox.tunnels)
+                tunnel = tunnels[SSH_PORT]
+                hostname, port = tunnel.tcp_socket
+                log.info("ssh.tunnel", sandbox_id=sandbox_id, hostname=hostname, port=port)
+                return (hostname, port)
+            except Exception as e:
+                log.warn(
+                    "ssh.tunnel_error",
+                    sandbox_id=sandbox_id,
+                    attempt=attempt + 1,
+                    retries=retries,
+                    error=type(e).__name__,
+                    exc=e,
+                )
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff * (attempt + 1))
+        return None
+
+    @staticmethod
     def _inject_vcs_env_vars(env_vars: dict[str, str], clone_token: str | None) -> None:
         """Inject VCS-neutral env vars based on SCM_PROVIDER."""
         scm_provider = os.environ.get("SCM_PROVIDER", "github")
@@ -243,6 +305,13 @@ class SandboxManager:
         if config.vnc_enabled:
             env_vars["VNC_ENABLED"] = "true"
 
+        if config.mux_enabled:
+            env_vars["MUX_ENABLED"] = "true"
+
+        # SSH is always enabled — generate a random password per sandbox
+        ssh_password = secrets.token_urlsafe(16)
+        env_vars["SSH_PASSWORD"] = ssh_password
+
         if config.session_config:
             env_vars["SESSION_CONFIG"] = config.session_config.model_dump_json()
 
@@ -256,6 +325,13 @@ class SandboxManager:
         else:
             image = base_image
 
+        # Always overlay the latest sandbox_runtime so entrypoint fixes
+        # apply even on repo images / snapshots built from older base images.
+        if config.snapshot_id or config.repo_image_id:
+            image = image.add_local_dir(
+                str(SANDBOX_RUNTIME_DIR), remote_path="/app/sandbox_runtime"
+            )
+
         # Build list of ports to expose
         encrypted_ports: list[int] = []
         if config.code_server_enabled:
@@ -264,6 +340,11 @@ class SandboxManager:
             encrypted_ports.append(NOVNC_PORT)
         if config.dev_server_enabled:
             encrypted_ports.append(DEV_SERVER_PORT)
+        if config.mux_enabled:
+            encrypted_ports.append(MUX_PORT)
+
+        # SSH always uses an unencrypted TCP port (SSH handles its own encryption)
+        unencrypted_ports: list[int] = [SSH_PORT]
 
         # Create the sandbox
         # The entrypoint command is passed as positional args
@@ -274,6 +355,7 @@ class SandboxManager:
             "timeout": config.timeout_seconds,
             "workdir": "/workspace",
             "env": env_vars,
+            "unencrypted_ports": unencrypted_ports,
         }
         if encrypted_ports:
             create_kwargs["encrypted_ports"] = encrypted_ports
@@ -296,6 +378,16 @@ class SandboxManager:
         dev_server_url: str | None = None
         if config.dev_server_enabled:
             dev_server_url = await self._resolve_dev_server_tunnel(sandbox, sandbox_id)
+        mux_url: str | None = None
+        if config.mux_enabled:
+            mux_url = await self._resolve_mux_tunnel(sandbox, sandbox_id)
+
+        # Resolve SSH tunnel (always enabled)
+        ssh_host: str | None = None
+        ssh_port: int | None = None
+        ssh_tunnel = await self._resolve_ssh_tunnel(sandbox, sandbox_id)
+        if ssh_tunnel:
+            ssh_host, ssh_port = ssh_tunnel
 
         duration_ms = int((time.time() - start_time) * 1000)
         log.info(
@@ -319,6 +411,10 @@ class SandboxManager:
             code_server_password=code_server_password,
             vnc_url=vnc_url,
             dev_server_url=dev_server_url,
+            mux_url=mux_url,
+            ssh_host=ssh_host,
+            ssh_port=ssh_port,
+            ssh_password=ssh_password,
         )
 
     async def create_build_sandbox(
@@ -513,6 +609,7 @@ class SandboxManager:
         code_server_enabled: bool = False,
         vnc_enabled: bool = False,
         dev_server_enabled: bool = True,
+        mux_enabled: bool = False,
     ) -> SandboxHandle:
         """
         Create a new sandbox from a filesystem snapshot Image.
@@ -553,8 +650,10 @@ class SandboxManager:
         if not sandbox_id:
             sandbox_id = f"sandbox-{repo_owner}-{repo_name}-{int(time.time() * 1000)}"
 
-        # Lookup the image by ID
-        image = modal.Image.from_id(snapshot_image_id)
+        # Lookup the image by ID and overlay latest sandbox_runtime
+        image = modal.Image.from_id(snapshot_image_id).add_local_dir(
+            str(SANDBOX_RUNTIME_DIR), remote_path="/app/sandbox_runtime"
+        )
 
         # Prepare environment variables (user vars first, system vars override)
         env_vars: dict[str, str] = {}
@@ -594,6 +693,13 @@ class SandboxManager:
         if vnc_enabled:
             env_vars["VNC_ENABLED"] = "true"
 
+        if mux_enabled:
+            env_vars["MUX_ENABLED"] = "true"
+
+        # SSH is always enabled — generate a random password per sandbox
+        ssh_password = secrets.token_urlsafe(16)
+        env_vars["SSH_PASSWORD"] = ssh_password
+
         # Build list of ports to expose
         encrypted_ports: list[int] = []
         if code_server_enabled:
@@ -602,6 +708,10 @@ class SandboxManager:
             encrypted_ports.append(NOVNC_PORT)
         if dev_server_enabled:
             encrypted_ports.append(DEV_SERVER_PORT)
+        if mux_enabled:
+            encrypted_ports.append(MUX_PORT)
+
+        unencrypted_ports: list[int] = [SSH_PORT]
 
         # Create the sandbox from the snapshot image
         create_kwargs: dict = {
@@ -611,6 +721,7 @@ class SandboxManager:
             "timeout": timeout_seconds,
             "workdir": "/workspace",
             "env": env_vars,
+            "unencrypted_ports": unencrypted_ports,
         }
         if encrypted_ports:
             create_kwargs["encrypted_ports"] = encrypted_ports
@@ -632,6 +743,16 @@ class SandboxManager:
         dev_server_url: str | None = None
         if dev_server_enabled:
             dev_server_url = await self._resolve_dev_server_tunnel(sandbox, sandbox_id)
+        mux_url: str | None = None
+        if mux_enabled:
+            mux_url = await self._resolve_mux_tunnel(sandbox, sandbox_id)
+
+        # Resolve SSH tunnel (always enabled)
+        ssh_host: str | None = None
+        ssh_port: int | None = None
+        ssh_tunnel = await self._resolve_ssh_tunnel(sandbox, sandbox_id)
+        if ssh_tunnel:
+            ssh_host, ssh_port = ssh_tunnel
 
         duration_ms = int((time.time() - start_time) * 1000)
         log.info(
@@ -656,6 +777,10 @@ class SandboxManager:
             code_server_password=code_server_password,
             vnc_url=vnc_url,
             dev_server_url=dev_server_url,
+            mux_url=mux_url,
+            ssh_host=ssh_host,
+            ssh_port=ssh_port,
+            ssh_password=ssh_password,
         )
 
     async def maintain_warm_pool(

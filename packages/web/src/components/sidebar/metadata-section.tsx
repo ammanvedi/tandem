@@ -16,7 +16,7 @@ import {
   CheckIcon,
   LinkIcon,
 } from "@/components/ui/icons";
-import { Badge, prBadgeVariant } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 
 interface MetadataSectionProps {
   createdAt: number;
@@ -112,11 +112,7 @@ export function MetadataSection({
           ) : (
             <span className="text-foreground">#{prNumber}</span>
           )}
-          {prState && (
-            <Badge variant={prBadgeVariant(prState)} className="capitalize">
-              {prState}
-            </Badge>
-          )}
+          {prState && <Badge className="capitalize">{prState}</Badge>}
         </div>
       )}
 

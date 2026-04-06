@@ -22,6 +22,8 @@ export const SessionInternalPaths = {
   spawnContext: "/internal/spawn-context",
   childSummary: "/internal/child-summary",
   updateTitle: "/internal/update-title",
+  updateCategory: "/internal/update-category",
+  updateTags: "/internal/update-tags",
   cancel: "/internal/cancel",
   childSessionUpdate: "/internal/child-session-update",
 } as const;

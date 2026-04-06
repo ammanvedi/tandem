@@ -1,6 +1,128 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-border: var(--border);
+  --color-border-muted: var(--border-muted);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+
+  --radius-lg: calc(var(--radius) * 2);
+  --radius-md: var(--radius);
+  --radius-sm: calc(var(--radius) / 2);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #f2ebe0;
+  --foreground: #2c2420;
+
+  --card: #f7f1e8;
+  --card-foreground: #2c2420;
+
+  --popover: #faf6f0;
+  --popover-foreground: #2c2420;
+
+  --primary: #2c2420;
+  --primary-foreground: #f7f1e8;
+
+  --secondary: rgba(44, 36, 32, 0.06);
+  --secondary-foreground: #6b5e54;
+
+  --accent: #d4513b;
+  --accent-foreground: #ffffff;
+  --accent-muted: rgba(212, 81, 59, 0.1);
+
+  --muted: rgba(44, 36, 32, 0.05);
+  --muted-foreground: #8a7d72;
+
+  --destructive: #c4362a;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(44, 36, 32, 0.12);
+  --border-muted: rgba(44, 36, 32, 0.06);
+
+  --input: #faf6f0;
+  --ring: #d4513b;
+
+  --success: #2e9e72;
+  --success-muted: rgba(46, 158, 114, 0.1);
+
+  --radius: 0.35rem;
+
+  --chart-1: #d4513b;
+  --chart-2: #2e9e72;
+  --chart-3: #d4923b;
+  --chart-4: #4a8fb8;
+  --chart-5: #8a6d55;
+
+  --sidebar: #ede5d8;
+  --sidebar-foreground: #2c2420;
+  --sidebar-primary: #2c2420;
+  --sidebar-primary-foreground: #f7f1e8;
+  --sidebar-accent: rgba(44, 36, 32, 0.06);
+  --sidebar-accent-foreground: #2c2420;
+  --sidebar-border: rgba(44, 36, 32, 0.1);
+  --sidebar-ring: #d4513b;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(46, 158, 114, 0.5);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 4px 2px rgba(46, 158, 114, 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
 
 /* Remove backtick decorations from prose inline code */
 .prose :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *))::before,
@@ -8,150 +130,9 @@
   content: none;
 }
 
-/* Let the hljs theme control code block background and text color.
-   Padding lives on code.hljs so the theme background covers the full box. */
+/* Let the hljs theme control code block background and text color. */
 pre code.hljs {
   padding: 0.75rem;
-}
-
-/*
- * Design System Color Tokens
- *
- * All colors are defined as CSS variables that automatically switch with dark mode.
- * Components should use semantic Tailwind classes (bg-background, text-foreground, etc.)
- * instead of hardcoded hex values.
- *
- * To change the color palette, update only these variables.
- */
-
-:root {
-  /* Core backgrounds */
-  --background: #f8f8f6;
-  --foreground: #1a1a1a;
-
-  /* Card/surface backgrounds */
-  --card: #f8f8f6;
-  --card-foreground: #1a1a1a;
-
-  /* Popover/dropdown backgrounds */
-  --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
-
-  /* Primary (inverted button style) */
-  --primary: #1a1a1a;
-  --primary-foreground: #ffffff;
-
-  /* Secondary */
-  --secondary: rgba(0, 0, 0, 0.05);
-
-  /* Accent color (warm brown) */
-  --accent: #8b7355;
-  --accent-foreground: #ffffff;
-  --accent-muted: rgba(139, 115, 85, 0.1);
-
-  /* Muted/secondary text */
-  --muted: rgba(0, 0, 0, 0.05);
-  --muted-foreground: #666666;
-  --secondary-foreground: #999999;
-
-  /* Destructive */
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-
-  /* Borders */
-  --border: rgba(0, 0, 0, 0.1);
-  --border-muted: rgba(0, 0, 0, 0.05);
-
-  /* Input backgrounds */
-  --input: #ffffff;
-
-  /* Focus ring */
-  --ring: #8b7355;
-
-  /* Success (green) */
-  --success: #28c840;
-  --success-muted: rgba(40, 200, 64, 0.1);
-
-  /* Border radius */
-  --radius: 0.25rem;
-}
-
-/* Dark mode via system preference (no-JS fallback) */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #1a1a1a;
-    --foreground: #f8f8f6;
-
-    --card: rgba(255, 255, 255, 0.05);
-    --card-foreground: #f8f8f6;
-
-    --popover: #252525;
-    --popover-foreground: #f8f8f6;
-
-    --primary: #f8f8f6;
-    --primary-foreground: #1a1a1a;
-
-    --secondary: rgba(255, 255, 255, 0.05);
-
-    --accent: #a68b6a;
-    --accent-foreground: #ffffff;
-    --accent-muted: rgba(139, 115, 85, 0.2);
-
-    --muted: rgba(255, 255, 255, 0.05);
-    --muted-foreground: #999999;
-    --secondary-foreground: #666666;
-
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-
-    --border: rgba(255, 255, 255, 0.1);
-    --border-muted: rgba(255, 255, 255, 0.05);
-
-    --input: #1a1a1a;
-
-    --ring: #a68b6a;
-
-    --success: #28c840;
-    --success-muted: rgba(40, 200, 64, 0.1);
-  }
-}
-
-/* Dark mode via class (authoritative when next-themes is loaded) */
-.dark {
-  --background: #1a1a1a;
-  --foreground: #f8f8f6;
-
-  --card: rgba(255, 255, 255, 0.05);
-  --card-foreground: #f8f8f6;
-
-  --popover: #252525;
-  --popover-foreground: #f8f8f6;
-
-  --primary: #f8f8f6;
-  --primary-foreground: #1a1a1a;
-
-  --secondary: rgba(255, 255, 255, 0.05);
-
-  --accent: #a68b6a;
-  --accent-foreground: #ffffff;
-  --accent-muted: rgba(139, 115, 85, 0.2);
-
-  --muted: rgba(255, 255, 255, 0.05);
-  --muted-foreground: #999999;
-  --secondary-foreground: #666666;
-
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-
-  --border: rgba(255, 255, 255, 0.1);
-  --border-muted: rgba(255, 255, 255, 0.05);
-
-  --input: #1a1a1a;
-
-  --ring: #a68b6a;
-
-  --success: #28c840;
-  --success-muted: rgba(40, 200, 64, 0.1);
 }
 
 html {
@@ -159,8 +140,6 @@ html {
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
   font-family:
     var(--font-geist-sans),
     system-ui,
@@ -175,10 +154,24 @@ body {
 
 ::selection {
   background-color: var(--accent);
-  color: white;
+  color: var(--accent-foreground);
 }
 
 *:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  html {
+    @apply font-sans;
+  }
 }

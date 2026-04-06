@@ -205,3 +205,21 @@ built with:
 - [Cloudflare Workers](https://workers.cloudflare.com) - Edge computing
 - [OpenCode](https://opencode.ai) - Coding agent runtime
 - [Next.js](https://nextjs.org) - Web framework
+
+what dies tandem need to turn into
+
+0. it needs to look and feel nicer as it does not at the moment
+1. need a new suggestions section in the sidebar
+2. need to periodically generate ideas and need a way to create and research my own
+3. need all agents connected with composio
+4. need to get tandem running in tandem
+5. need a chat section where you can talk to your mcps
+6. need a landing page
+7. need sidebar sections
+
+- suggestions
+- products
+- chats
+  - pre populated per integration
+
+9.

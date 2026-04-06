@@ -61,6 +61,8 @@ export interface CreateSandboxConfig {
   codeServerEnabled?: boolean;
   /** Whether to enable VNC display stack (Xvfb + x11vnc + noVNC) in the sandbox */
   vncEnabled?: boolean;
+  /** Whether to enable Mux parallel agent server in the sandbox */
+  muxEnabled?: boolean;
 }
 
 /**
@@ -83,6 +85,14 @@ export interface CreateSandboxResult {
   vncUrl?: string;
   /** Dev server tunnel URL (if available) */
   devServerUrl?: string;
+  /** Mux parallel agent tunnel URL (if available) */
+  muxUrl?: string;
+  /** SSH tunnel hostname (if available) */
+  sshHost?: string;
+  /** SSH tunnel port (if available) */
+  sshPort?: number;
+  /** SSH password (if available) */
+  sshPassword?: string;
 }
 
 /**
@@ -119,6 +129,8 @@ export interface RestoreConfig {
   codeServerEnabled?: boolean;
   /** Whether to enable VNC display stack (Xvfb + x11vnc + noVNC) in the sandbox */
   vncEnabled?: boolean;
+  /** Whether to enable Mux parallel agent server in the sandbox */
+  muxEnabled?: boolean;
 }
 
 /**
@@ -141,6 +153,14 @@ export interface RestoreResult {
   vncUrl?: string;
   /** Dev server tunnel URL (if available) */
   devServerUrl?: string;
+  /** Mux parallel agent tunnel URL (if available) */
+  muxUrl?: string;
+  /** SSH tunnel hostname (if available) */
+  sshHost?: string;
+  /** SSH tunnel port (if available) */
+  sshPort?: number;
+  /** SSH password (if available) */
+  sshPassword?: string;
 }
 
 /**

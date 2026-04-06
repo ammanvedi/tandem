@@ -10,6 +10,8 @@ import {
   CodeServerSection,
   VncSection,
   DevServerSection,
+  MuxSection,
+  SshSection,
 } from "./sidebar";
 import { ChildSessionsSection } from "./sidebar/child-sessions-section";
 import { extractLatestTasks } from "@/lib/tasks";
@@ -17,11 +19,21 @@ import { extractChangedFiles } from "@/lib/files";
 import type { Artifact, SandboxEvent } from "@/types/session";
 import type { ParticipantPresence, SessionState } from "@open-inspect/shared";
 
+export interface FloatingWindowToggles {
+  vncOpen: boolean;
+  devServerOpen: boolean;
+  muxOpen: boolean;
+  toggleVnc: () => void;
+  toggleDevServer: () => void;
+  toggleMux: () => void;
+}
+
 interface SessionRightSidebarProps {
   sessionState: SessionState | null;
   participants: ParticipantPresence[];
   events: SandboxEvent[];
   artifacts: Artifact[];
+  floatingWindows?: FloatingWindowToggles;
 }
 
 export type SessionRightSidebarContentProps = SessionRightSidebarProps;
@@ -31,6 +43,7 @@ export function SessionRightSidebarContent({
   participants,
   events,
   artifacts,
+  floatingWindows,
 }: SessionRightSidebarContentProps) {
   const tasks = useMemo(() => extractLatestTasks(events), [events]);
   const filesChanged = useMemo(() => extractChangedFiles(events), [events]);
@@ -83,7 +96,12 @@ export function SessionRightSidebarContent({
       {/* VNC Display */}
       {sessionState.vncUrl && (
         <div className="px-4 py-4 border-b border-border-muted">
-          <VncSection url={sessionState.vncUrl} sandboxStatus={sessionState.sandboxStatus} />
+          <VncSection
+            url={sessionState.vncUrl}
+            sandboxStatus={sessionState.sandboxStatus}
+            isWindowOpen={floatingWindows?.vncOpen}
+            onToggleWindow={floatingWindows?.toggleVnc}
+          />
         </div>
       )}
 
@@ -92,6 +110,33 @@ export function SessionRightSidebarContent({
         <div className="px-4 py-4 border-b border-border-muted">
           <DevServerSection
             url={sessionState.devServerUrl}
+            sandboxStatus={sessionState.sandboxStatus}
+            isWindowOpen={floatingWindows?.devServerOpen}
+            onToggleWindow={floatingWindows?.toggleDevServer}
+          />
+        </div>
+      )}
+
+      {/* Mux Parallel Agent */}
+      {sessionState.muxUrl && (
+        <div className="px-4 py-4 border-b border-border-muted">
+          <MuxSection
+            url={sessionState.muxUrl}
+            sandboxStatus={sessionState.sandboxStatus}
+            isWindowOpen={floatingWindows?.muxOpen}
+            onToggleWindow={floatingWindows?.toggleMux}
+          />
+        </div>
+      )}
+
+      {/* SSH Access */}
+      {sessionState.sshHost && sessionState.sshPort && sessionState.sshPassword && (
+        <div className="px-4 py-4 border-b border-border-muted">
+          <SshSection
+            host={sessionState.sshHost}
+            port={sessionState.sshPort}
+            password={sessionState.sshPassword}
+            repoName={sessionState.repoName}
             sandboxStatus={sessionState.sandboxStatus}
           />
         </div>
@@ -131,6 +176,7 @@ export function SessionRightSidebar({
   participants,
   events,
   artifacts,
+  floatingWindows,
 }: SessionRightSidebarProps) {
   return (
     <aside className="w-80 border-l border-border-muted overflow-y-auto hidden lg:block">
@@ -139,6 +185,7 @@ export function SessionRightSidebar({
         participants={participants}
         events={events}
         artifacts={artifacts}
+        floatingWindows={floatingWindows}
       />
     </aside>
   );

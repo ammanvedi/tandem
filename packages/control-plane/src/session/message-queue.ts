@@ -189,10 +189,18 @@ export class SessionMessageQueue {
       session?.reasoning_effort ??
       getDefaultReasoningEffort(resolvedModel);
 
+    let promptContent = message.content;
+    if (session?.category === "idea") {
+      promptContent =
+        "[SYSTEM: This is an Ideas session. Operate in read-only mode: analyze the codebase, " +
+        "suggest features and improvements, but do NOT modify any files. Only read and suggest.]\n\n" +
+        promptContent;
+    }
+
     const command: SandboxCommand = {
       type: "prompt",
       messageId: message.id,
-      content: message.content,
+      content: promptContent,
       model: resolvedModel,
       reasoningEffort: resolvedEffort,
       author: {

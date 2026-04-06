@@ -15,6 +15,7 @@ import type {
 } from "./types";
 import type {
   SessionStatus,
+  SessionCategory,
   SandboxStatus,
   GitSyncStatus,
   MessageStatus,
@@ -69,8 +70,11 @@ export interface UpsertSessionData {
   parentSessionId?: string | null;
   spawnSource?: SpawnSource;
   spawnDepth?: number;
+  category?: SessionCategory;
+  tags?: string[];
   codeServerEnabled?: boolean;
   vncEnabled?: boolean;
+  muxEnabled?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -227,8 +231,8 @@ export class SessionRepository {
 
   upsertSession(data: UpsertSessionData): void {
     this.sql.exec(
-      `INSERT OR REPLACE INTO session (id, session_name, title, repo_owner, repo_name, repo_id, base_branch, model, reasoning_effort, status, parent_session_id, spawn_source, spawn_depth, code_server_enabled, vnc_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO session (id, session_name, title, repo_owner, repo_name, repo_id, base_branch, model, reasoning_effort, status, parent_session_id, spawn_source, spawn_depth, category, tags, code_server_enabled, vnc_enabled, mux_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       data.id,
       data.sessionName,
       data.title,
@@ -242,8 +246,11 @@ export class SessionRepository {
       data.parentSessionId ?? null,
       data.spawnSource ?? "user",
       data.spawnDepth ?? 0,
+      data.category ?? "chat",
+      JSON.stringify(data.tags ?? []),
       data.codeServerEnabled ? 1 : 0,
       data.vncEnabled ? 1 : 0,
+      (data.muxEnabled ?? true) ? 1 : 0,
       data.createdAt,
       data.updatedAt
     );
@@ -281,6 +288,24 @@ export class SessionRepository {
     this.sql.exec(
       `UPDATE session SET status = ?, updated_at = ? WHERE id = ?`,
       status,
+      updatedAt,
+      sessionId
+    );
+  }
+
+  updateSessionCategory(sessionId: string, category: SessionCategory, updatedAt: number): void {
+    this.sql.exec(
+      `UPDATE session SET category = ?, updated_at = ? WHERE id = ?`,
+      category,
+      updatedAt,
+      sessionId
+    );
+  }
+
+  updateSessionTags(sessionId: string, tags: string[], updatedAt: number): void {
+    this.sql.exec(
+      `UPDATE session SET tags = ?, updated_at = ? WHERE id = ?`,
+      JSON.stringify(tags),
       updatedAt,
       sessionId
     );
@@ -397,6 +422,22 @@ export class SessionRepository {
     this.sql.exec(
       `UPDATE sandbox SET dev_server_url = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
       url
+    );
+  }
+
+  updateSandboxMuxUrl(url: string): void {
+    this.sql.exec(
+      `UPDATE sandbox SET mux_url = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
+      url
+    );
+  }
+
+  updateSandboxSsh(host: string, port: number, password: string): void {
+    this.sql.exec(
+      `UPDATE sandbox SET ssh_host = ?, ssh_port = ?, ssh_password = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
+      host,
+      port,
+      password
     );
   }
 

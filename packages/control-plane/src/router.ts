@@ -20,6 +20,7 @@ import {
   isValidReasoningEffort,
   type CodeServerSettings,
   type SessionStatus,
+  type SessionCategory,
   type CallbackContext,
   type SpawnChildSessionRequest,
   type SpawnContext,
@@ -88,6 +89,15 @@ const SESSION_STATUSES: SessionStatus[] = [
 function parseSessionStatus(value: string | null): SessionStatus | undefined {
   if (!value) return undefined;
   return SESSION_STATUSES.includes(value as SessionStatus) ? (value as SessionStatus) : undefined;
+}
+
+const SESSION_CATEGORIES: SessionCategory[] = ["idea", "product", "chat"];
+
+function parseSessionCategory(value: string | null): SessionCategory | undefined {
+  if (!value) return undefined;
+  return SESSION_CATEGORIES.includes(value as SessionCategory)
+    ? (value as SessionCategory)
+    : undefined;
 }
 
 /**
@@ -620,8 +630,15 @@ async function handleListSessions(
     return error("Invalid excludeStatus", 400);
   }
 
+  const categoryParam = url.searchParams.get("category");
+  const category = parseSessionCategory(categoryParam);
+
+  if (categoryParam && !category) {
+    return error("Invalid category", 400);
+  }
+
   const store = new SessionIndexStore(env.DB);
-  const result = await store.list({ status, excludeStatus, limit, offset });
+  const result = await store.list({ status, excludeStatus, category, limit, offset });
 
   return json({
     sessions: result.sessions,
@@ -715,8 +732,9 @@ async function handleCreateSession(
     }
   }
 
-  // Generate session ID
+  // Generate session ID and auto branch name
   const sessionId = generateId();
+  const autoBranchName = `inspect/${sessionId.slice(0, 8)}`;
 
   // Get Durable Object
   const doId = env.SESSION.idFromName(sessionId);
@@ -732,6 +750,14 @@ async function handleCreateSession(
   // Resolve code-server integration setting for this repo
   const codeServerEnabled = await resolveCodeServerEnabled(env.DB, repoOwner, repoName);
 
+  // Validate category if provided
+  const category = body.category
+    ? parseSessionCategory(body.category)
+    : ("chat" as SessionCategory);
+  if (body.category && !category) {
+    return error("Invalid category");
+  }
+
   // Initialize session with user info and optional encrypted token
   const initResponse = await stub.fetch(
     internalRequest(
@@ -740,7 +766,7 @@ async function handleCreateSession(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionName: sessionId, // Pass the session name for WebSocket routing
+          sessionName: sessionId,
           repoOwner,
           repoName,
           repoId,
@@ -758,6 +784,8 @@ async function handleCreateSession(
           scmTokenExpiresAt,
           scmUserId,
           codeServerEnabled,
+          category,
+          autoBranchName,
         }),
       },
       ctx
@@ -798,6 +826,8 @@ async function handleCreateSession(
     reasoningEffort,
     baseBranch: body.branch || defaultBranch || "main",
     status: "created",
+    category: category!,
+    tags: [],
     createdAt: now,
     updatedAt: now,
   });
@@ -1347,6 +1377,86 @@ async function handleUnarchiveSession(
   return response;
 }
 
+// async function handleUpdateSessionCategory(
+//   request: Request,
+//   env: Env,
+//   match: RegExpMatchArray,
+//   ctx: RequestContext
+// ): Promise<Response> {
+//   const sessionId = match.groups?.id;
+//   if (!sessionId) return error("Session ID required");
+
+//   const body = (await request.json()) as { category?: string };
+//   if (!body.category) return error("category is required");
+
+//   const category = parseSessionCategory(body.category);
+//   if (!category) return error("Invalid category");
+
+//   const doId = env.SESSION.idFromName(sessionId);
+//   const stub = env.SESSION.get(doId);
+//   const now = Date.now();
+
+//   const doResponse = await stub.fetch(
+//     internalRequest(
+//       buildSessionInternalUrl(SessionInternalPaths.updateCategory),
+//       {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ category }),
+//       },
+//       ctx
+//     )
+//   );
+
+//   if (!doResponse.ok) {
+//     return error("Failed to update category", doResponse.status);
+//   }
+
+//   const sessionStore = new SessionIndexStore(env.DB);
+//   await sessionStore.updateCategory(sessionId, category);
+
+//   return json({ category, updatedAt: now });
+// }
+
+// async function handleUpdateSessionTags(
+//   request: Request,
+//   env: Env,
+//   match: RegExpMatchArray,
+//   ctx: RequestContext
+// ): Promise<Response> {
+//   const sessionId = match.groups?.id;
+//   if (!sessionId) return error("Session ID required");
+
+//   const body = (await request.json()) as { tags?: string[] };
+//   if (!Array.isArray(body.tags)) return error("tags must be an array of strings");
+//   if (!body.tags.every((t) => typeof t === "string")) return error("tags must be strings");
+
+//   const doId = env.SESSION.idFromName(sessionId);
+//   const stub = env.SESSION.get(doId);
+//   const now = Date.now();
+
+//   const doResponse = await stub.fetch(
+//     internalRequest(
+//       buildSessionInternalUrl(SessionInternalPaths.updateTags),
+//       {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ tags: body.tags }),
+//       },
+//       ctx
+//     )
+//   );
+
+//   if (!doResponse.ok) {
+//     return error("Failed to update tags", doResponse.status);
+//   }
+
+//   const sessionStore = new SessionIndexStore(env.DB);
+//   await sessionStore.updateTags(sessionId, body.tags);
+
+//   return json({ tags: body.tags, updatedAt: now });
+// }
+
 // Child session handlers
 
 async function handleSpawnChild(
@@ -1486,6 +1596,8 @@ async function handleSpawnChild(
     parentSessionId: parentId,
     spawnSource: "agent",
     spawnDepth: childDepth,
+    category: "product",
+    tags: [],
     createdAt: now,
     updatedAt: now,
   });

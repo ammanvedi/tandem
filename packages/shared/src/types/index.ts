@@ -42,6 +42,7 @@ export type EventType =
   | "user_message";
 export type ParticipantRole = "owner" | "member";
 export type SpawnSource = "user" | "agent" | "automation";
+export type SessionCategory = "idea" | "product" | "chat";
 export type ConfidenceLevel = "high" | "medium" | "low";
 
 // Participant in a session
@@ -69,6 +70,8 @@ export interface Session {
   parentSessionId: string | null;
   spawnSource: SpawnSource;
   spawnDepth: number;
+  category: SessionCategory;
+  tags: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -305,6 +308,8 @@ export type ServerMessage =
   | { type: "code_server_info"; url: string; password: string }
   | { type: "vnc_info"; url: string }
   | { type: "dev_server_info"; url: string }
+  | { type: "mux_info"; url: string }
+  | { type: "ssh_info"; host: string; port: number; password: string }
   | { type: "error"; code: string; message: string };
 
 // Session state sent to clients
@@ -327,6 +332,10 @@ export interface SessionState {
   codeServerPassword?: string | null;
   vncUrl?: string | null;
   devServerUrl?: string | null;
+  muxUrl?: string | null;
+  sshHost?: string | null;
+  sshPort?: number | null;
+  sshPassword?: string | null;
 }
 
 // Participant presence info
@@ -496,6 +505,7 @@ export interface CreateSessionRequest {
   model?: string;
   reasoningEffort?: string;
   branch?: string;
+  category?: SessionCategory;
 }
 
 export interface CreateSessionResponse {
