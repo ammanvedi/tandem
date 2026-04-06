@@ -122,6 +122,8 @@ base_image = (
         # Install @opencode-ai/plugin globally for custom tools
         # This ensures tools can import the plugin without needing to run bun add
         "npm install -g @opencode-ai/plugin@latest zod",
+        # Install MCP SDK globally for the canvas MCP server
+        "npm install -g @modelcontextprotocol/sdk",
     )
     # Install code-server for browser-based VS Code editing (direct .deb from GitHub releases)
     .run_commands(

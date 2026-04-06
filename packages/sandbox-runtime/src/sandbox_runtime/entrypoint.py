@@ -18,6 +18,7 @@ import re
 import secrets
 import shutil
 import signal
+import subprocess
 import time
 from pathlib import Path
 
@@ -129,11 +130,17 @@ class SandboxSupervisor:
     # ------------------------------------------------------------------
 
     async def _clone_repo(self) -> bool:
-        """Shallow-clone the repository."""
+        """Shallow-clone the repository.
+
+        If the requested branch does not exist on the remote (e.g. an
+        auto-generated working branch), clones the repo's default branch
+        and creates the working branch locally.
+        """
         self.log.info(
             "git.clone_start",
             repo_owner=self.repo_owner,
             repo_name=self.repo_name,
+            branch=self.base_branch,
             authenticated=bool(self.vcs_clone_token),
         )
 
@@ -151,15 +158,52 @@ class SandboxSupervisor:
         )
         _stdout, stderr = await result.communicate()
 
-        if result.returncode != 0:
+        if result.returncode == 0:
+            self.log.info("git.clone_complete", repo_path=str(self.repo_path))
+            return True
+
+        self.log.info(
+            "git.clone_branch_missing",
+            branch=self.base_branch,
+            stderr=self._redact_git_stderr(stderr.decode()),
+        )
+
+        fallback = await asyncio.create_subprocess_exec(
+            "git",
+            "clone",
+            "--depth",
+            str(self.CLONE_DEPTH_COMMITS),
+            self._build_repo_url(),
+            str(self.repo_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _stdout, fallback_stderr = await fallback.communicate()
+
+        if fallback.returncode != 0:
             self.log.error(
                 "git.clone_error",
-                stderr=self._redact_git_stderr(stderr.decode()),
-                exit_code=result.returncode,
+                stderr=self._redact_git_stderr(fallback_stderr.decode()),
+                exit_code=fallback.returncode,
             )
             return False
 
-        self.log.info("git.clone_complete", repo_path=str(self.repo_path))
+        checkout = await asyncio.create_subprocess_exec(
+            "git",
+            "checkout",
+            "-b",
+            self.base_branch,
+            cwd=self.repo_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await checkout.communicate()
+
+        self.log.info(
+            "git.clone_complete",
+            repo_path=str(self.repo_path),
+            created_branch=self.base_branch,
+        )
         return True
 
     async def _ensure_remote_auth(self) -> None:
@@ -249,9 +293,21 @@ class SandboxSupervisor:
         try:
             await self._ensure_remote_auth()
             branch = self.base_branch
-            if not await self._fetch_branch(branch):
-                return False
-            return await self._checkout_branch(branch)
+            if await self._fetch_branch(branch):
+                return await self._checkout_branch(branch)
+
+            self.log.info("git.sync_branch_missing", branch=branch)
+            checkout = await asyncio.create_subprocess_exec(
+                "git",
+                "checkout",
+                "-b",
+                branch,
+                cwd=self.repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await checkout.communicate()
+            return checkout.returncode == 0
         except Exception as e:
             self.log.error("git.update_error", exc=e)
             return False
@@ -769,8 +825,32 @@ class SandboxSupervisor:
         # Model format is "provider/model", e.g. "anthropic/claude-sonnet-4-6"
         provider = self.session_config.get("provider", "anthropic")
         model = self.session_config.get("model", "claude-sonnet-4-6")
+        session_id = self.session_config.get("session_id", "")
+        mcp_servers = {
+            "canvas": {
+                "type": "local",
+                "command": ["node", "/app/sandbox_runtime/mcp/canvas-mcp-server.js"],
+                "environment": {
+                    "CONTROL_PLANE_URL": self.control_plane_url,
+                    "SANDBOX_AUTH_TOKEN": self.sandbox_token,
+                    "SESSION_ID": session_id,
+                },
+            },
+        }
+
+        refero_token = os.environ.get("REFERO_API_TOKEN")
+        if refero_token:
+            mcp_servers["refero"] = {
+                "type": "remote",
+                "url": "https://api.refero.design/v1/mcp",
+                "headers": {
+                    "Authorization": refero_token,
+                },
+            }
+
         opencode_config = {
             "model": f"{provider}/{model}",
+            "mcp": mcp_servers,
             "permission": {
                 "*": {
                     "*": "allow",
@@ -784,6 +864,25 @@ class SandboxSupervisor:
             workdir = self.repo_path
 
         self._install_tools(workdir)
+
+        # Install Refero design skill when the MCP token is available
+        if os.environ.get("REFERO_API_TOKEN"):
+            skill_dir = workdir / ".opencode" / "skills" / "refero-design"
+            if not skill_dir.exists():
+                try:
+                    subprocess.run(
+                        [
+                            "git", "clone", "--depth=1",
+                            "https://github.com/referodesign/refero_skill.git",
+                            str(skill_dir),
+                        ],
+                        check=False,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    self.log.info("refero_skill.installed")
+                except Exception as e:
+                    self.log.warn("refero_skill.install_failed", exc=e)
 
         # Deploy codex auth proxy plugin if OpenAI OAuth is configured
         opencode_dir = workdir / ".opencode"

@@ -151,6 +151,7 @@ const SANDBOX_AUTH_ROUTES: RegExp[] = [
   /^\/sessions\/[^/]+\/children$/, // POST spawn, GET list
   /^\/sessions\/[^/]+\/children\/[^/]+$/, // GET child detail
   /^\/sessions\/[^/]+\/children\/[^/]+\/cancel$/, // POST cancel child
+  /^\/sessions\/[^/]+\/canvas\/snapshot$/, // Canvas snapshot from sandbox MCP
 ];
 
 type CachedScmProvider =
@@ -466,6 +467,13 @@ const routes: Route[] = [
     method: "POST",
     pattern: parsePattern("/sessions/:id/children/:childId/cancel"),
     handler: handleCancelChild,
+  },
+
+  // Canvas snapshot (sandbox-authenticated)
+  {
+    method: "POST",
+    pattern: parsePattern("/sessions/:id/canvas/snapshot"),
+    handler: handleCanvasSnapshot,
   },
 
   // Repository management
@@ -1744,4 +1752,22 @@ async function handleCancelChild(
   }
 
   return response;
+}
+
+async function handleCanvasSnapshot(
+  _request: Request,
+  env: Env,
+  match: RegExpMatchArray,
+  ctx: RequestContext
+): Promise<Response> {
+  const stub = getSessionStub(env, match);
+  if (!stub) return error("Session ID required");
+
+  return stub.fetch(
+    internalRequest(
+      buildSessionInternalUrl(SessionInternalPaths.canvasSnapshot),
+      { method: "POST" },
+      ctx
+    )
+  );
 }

@@ -14,27 +14,35 @@ import {
   DEFAULT_MODEL,
   getDefaultReasoningEffort,
   isValidReasoningEffort,
-  type ModelCategory,
 } from "@open-inspect/shared";
 import { useEnabledModels } from "@/hooks/use-enabled-models";
-import { useRepos, type Repo } from "@/hooks/use-repos";
+import { useRepos } from "@/hooks/use-repos";
 import { useBranches } from "@/hooks/use-branches";
 import { ReasoningEffortPills } from "@/components/reasoning-effort-pills";
 import {
   SidebarIcon,
   RepoIcon,
-  ModelIcon,
   BranchIcon,
   ChevronDownIcon,
   SendIcon,
+  LightbulbIcon,
+  AudioLinesIcon,
 } from "@/components/ui/icons";
-import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/combobox";
+import { Button } from "@/components/ui/button";
 
 const LAST_SELECTED_REPO_STORAGE_KEY = "open-inspect-last-selected-repo";
 const LAST_SELECTED_MODEL_STORAGE_KEY = "open-inspect-last-selected-model";
 const LAST_SELECTED_REASONING_EFFORT_STORAGE_KEY = "open-inspect-last-selected-reasoning-effort";
 
 const VALID_CATEGORIES: SessionCategory[] = ["idea", "product", "chat"];
+
+function generateBranchName(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return `tandem/${id}`;
+}
 
 export default function Home() {
   const { data: session } = useSession();
@@ -52,6 +60,7 @@ export default function Home() {
     getDefaultReasoningEffort(DEFAULT_MODEL)
   );
   const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [autoBranch, setAutoBranch] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -61,12 +70,11 @@ export default function Home() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingConfigRef = useRef<{ repo: string; model: string; branch: string } | null>(null);
   const [hasHydratedModelPreferences, setHasHydratedModelPreferences] = useState(false);
-  const { enabledModels, enabledModelOptions } = useEnabledModels();
+  const { enabledModels } = useEnabledModels();
   const selectedRepoOwner = selectedRepo.split("/")[0] ?? "";
   const selectedRepoName = selectedRepo.split("/")[1] ?? "";
   const { branches, loading: loadingBranches } = useBranches(selectedRepoOwner, selectedRepoName);
 
-  // Auto-select repo when repos load
   useEffect(() => {
     if (repos.length > 0 && !selectedRepo) {
       const lastSelectedRepo = localStorage.getItem(LAST_SELECTED_REPO_STORAGE_KEY);
@@ -74,8 +82,9 @@ export default function Home() {
       const defaultRepo =
         (hasLastSelectedRepo ? lastSelectedRepo : repos[0].fullName) ?? repos[0].fullName;
       setSelectedRepo(defaultRepo);
-      const repo = repos.find((r) => r.fullName === defaultRepo);
-      if (repo) setSelectedBranch(repo.defaultBranch);
+      const newBranch = generateBranchName();
+      setAutoBranch(newBranch);
+      setSelectedBranch(newBranch);
     }
   }, [repos, selectedRepo]);
 
@@ -189,7 +198,6 @@ export default function Home() {
     return promise;
   }, [selectedRepo, selectedModel, reasoningEffort, selectedBranch, pendingSessionId, category]);
 
-  // Reset selections when model preferences change (only after hydration)
   useEffect(() => {
     if (!hasHydratedModelPreferences) return;
 
@@ -205,18 +213,11 @@ export default function Home() {
     }
   }, [hasHydratedModelPreferences, enabledModels, selectedModel, reasoningEffort]);
 
-  const handleRepoChange = useCallback(
-    (repoFullName: string) => {
-      setSelectedRepo(repoFullName);
-      const repo = repos.find((r) => r.fullName === repoFullName);
-      if (repo) setSelectedBranch(repo.defaultBranch);
-    },
-    [repos]
-  );
-
-  const handleModelChange = useCallback((model: string) => {
-    setSelectedModel(model);
-    setReasoningEffort(getDefaultReasoningEffort(model));
+  const handleRepoChange = useCallback((repoFullName: string) => {
+    setSelectedRepo(repoFullName);
+    const newBranch = generateBranchName();
+    setAutoBranch(newBranch);
+    setSelectedBranch(newBranch);
   }, []);
 
   const handlePromptChange = (value: string) => {
@@ -261,6 +262,11 @@ export default function Home() {
       });
 
       if (res.ok) {
+        fetch(`/api/sessions/${sessionId}/generate-title`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        }).catch(() => {});
         mutate(SIDEBAR_SESSIONS_KEY);
         router.push(`/session/${sessionId}`);
       } else {
@@ -274,84 +280,11 @@ export default function Home() {
     }
   };
 
-  return (
-    <HomeContent
-      isAuthenticated={!!session}
-      repos={repos}
-      loadingRepos={loadingRepos}
-      selectedRepo={selectedRepo}
-      setSelectedRepo={handleRepoChange}
-      selectedBranch={selectedBranch}
-      setSelectedBranch={setSelectedBranch}
-      branches={branches}
-      loadingBranches={loadingBranches}
-      selectedModel={selectedModel}
-      setSelectedModel={handleModelChange}
-      reasoningEffort={reasoningEffort}
-      setReasoningEffort={setReasoningEffort}
-      prompt={prompt}
-      handlePromptChange={handlePromptChange}
-      creating={creating}
-      isCreatingSession={isCreatingSession}
-      error={error}
-      handleSubmit={handleSubmit}
-      modelOptions={enabledModelOptions}
-      category={category}
-    />
-  );
-}
-
-function HomeContent({
-  isAuthenticated,
-  repos,
-  loadingRepos,
-  selectedRepo,
-  setSelectedRepo,
-  selectedBranch,
-  setSelectedBranch,
-  branches,
-  loadingBranches,
-  selectedModel,
-  setSelectedModel,
-  reasoningEffort,
-  setReasoningEffort,
-  prompt,
-  handlePromptChange,
-  creating,
-  isCreatingSession,
-  error,
-  handleSubmit,
-  modelOptions,
-  category,
-}: {
-  isAuthenticated: boolean;
-  repos: Repo[];
-  loadingRepos: boolean;
-  selectedRepo: string;
-  setSelectedRepo: (value: string) => void;
-  selectedBranch: string;
-  setSelectedBranch: (value: string) => void;
-  branches: { name: string }[];
-  loadingBranches: boolean;
-  selectedModel: string;
-  setSelectedModel: (value: string) => void;
-  reasoningEffort: string | undefined;
-  setReasoningEffort: (value: string | undefined) => void;
-  prompt: string;
-  handlePromptChange: (value: string) => void;
-  creating: boolean;
-  isCreatingSession: boolean;
-  error: string;
-  handleSubmit: (e: React.FormEvent) => void;
-  modelOptions: ModelCategory[];
-  category: SessionCategory;
-}) {
   const { isOpen, toggle } = useSidebarContext();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return;
-
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       handleSubmit(e);
@@ -363,13 +296,12 @@ function HomeContent({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header with toggle when sidebar is closed */}
       {!isOpen && (
-        <header className="border-b border-border-muted flex-shrink-0">
+        <header className="flex-shrink-0">
           <div className="px-4 py-3">
             <button
               onClick={toggle}
-              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition"
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition"
               title={`Open sidebar (${SHORTCUT_LABELS.TOGGLE_SIDEBAR})`}
               aria-label={`Open sidebar (${SHORTCUT_LABELS.TOGGLE_SIDEBAR})`}
             >
@@ -381,75 +313,79 @@ function HomeContent({
 
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="w-full max-w-2xl">
-          {/* Welcome text */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-semibold text-foreground mb-2">Welcome to Open-Inspect</h1>
-            {isAuthenticated ? (
-              <p className="text-muted-foreground">
+            <h1
+              className="text-4xl font-bold text-foreground mb-2"
+              style={{ fontFamily: "var(--font-logo)" }}
+            >
+              tandem
+            </h1>
+            {session ? (
+              <p className="text-muted-foreground text-sm">
                 Ask a question or describe what you want to build
               </p>
             ) : (
-              <p className="text-muted-foreground">Sign in to start a new session</p>
+              <p className="text-muted-foreground text-sm">Sign in to start a new session</p>
             )}
           </div>
 
-          {/* Input box - only show when authenticated */}
-          {isAuthenticated && (
+          {session && (
             <form onSubmit={handleSubmit}>
               {error && (
-                <div className="mb-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 border border-red-200 dark:border-red-800 text-sm">
+                <div className="mb-4 bg-red-900/20 text-red-400 px-4 py-3 border border-red-800 rounded-lg text-sm">
                   {error}
                 </div>
               )}
 
-              <div className="border border-border bg-input">
-                {/* Text input area */}
-                <div className="relative">
+              <div className="rounded-lg">
+                {/* Text input */}
+                <div className="bg-surface-elevated relative rounded-t-lg">
                   <textarea
                     ref={inputRef}
                     value={prompt}
                     onChange={(e) => handlePromptChange(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={
-                      category === "idea"
-                        ? "Describe your idea..."
-                        : category === "product"
-                          ? "What do you want to build?"
-                          : "What do you want to discuss?"
-                    }
+                    placeholder="What do you want to build?"
                     disabled={creating}
-                    className="w-full resize-none bg-transparent px-4 pt-4 pb-12 focus:outline-none text-foreground placeholder:text-secondary-foreground disabled:opacity-50"
+                    className="w-full resize-none bg-transparent px-4 pt-4 pb-3 focus:outline-none text-foreground placeholder:text-text-warm-muted disabled:opacity-50 text-[16px] tracking-[-0.8px]"
                     rows={3}
                   />
-                  {/* Submit button */}
-                  <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                    {isCreatingSession && (
-                      <span className="text-xs text-accent">Warming sandbox...</span>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={!prompt.trim() || creating || !selectedRepo}
-                      className="p-2 text-secondary-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition"
-                      title={`Send (${SHORTCUT_LABELS.SEND_PROMPT})`}
-                      aria-label={`Send (${SHORTCUT_LABELS.SEND_PROMPT})`}
-                    >
-                      {creating ? (
-                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <SendIcon className="w-5 h-5" />
+                  {/* Action buttons */}
+                  <div className="flex items-center justify-between px-4 pb-3">
+                    <Button type="button" variant="surface" size="compact">
+                      <LightbulbIcon className="w-3 h-3" />
+                      PLAN
+                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      {isCreatingSession && (
+                        <span className="text-[11px] text-accent mr-2">Warming sandbox...</span>
                       )}
-                    </button>
+                      <Button type="button" variant="surface" size="icon-24" title="Voice input">
+                        <AudioLinesIcon className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="surface"
+                        size="icon-24"
+                        disabled={!prompt.trim() || creating || !selectedRepo}
+                        title={`Send (${SHORTCUT_LABELS.SEND_PROMPT})`}
+                      >
+                        {creating ? (
+                          <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <SendIcon className="w-3 h-3" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Footer row with repo and model selectors */}
-                <div className="flex flex-col gap-2 px-4 py-2 border-t border-border-muted sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-                  {/* Left side - Repo selector + Model selector */}
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 min-w-0">
-                    {/* Repo selector */}
+                {/* Footer */}
+                <div className="bg-surface-footer flex flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-0 rounded-b-lg">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                     <Combobox
                       value={selectedRepo}
-                      onChange={(value) => setSelectedRepo(value)}
+                      onChange={(value) => handleRepoChange(value)}
                       items={repos.map((repo) => ({
                         value: repo.fullName,
                         label: repo.name,
@@ -465,64 +401,45 @@ function HomeContent({
                       direction="up"
                       dropdownWidth="w-72"
                       disabled={creating || loadingRepos}
-                      triggerClassName="flex max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      triggerClassName="flex max-w-full items-center gap-1.5 text-[12px] text-text-warm-muted tracking-[-0.24px] uppercase hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition"
                     >
-                      <RepoIcon className="w-4 h-4" />
-                      <span className="truncate max-w-[12rem] sm:max-w-none">
+                      <RepoIcon className="w-3 h-3" />
+                      <span className="truncate max-w-[10rem]">
                         {loadingRepos ? "Loading..." : displayRepoName}
                       </span>
                       <ChevronDownIcon className="w-3 h-3" />
                     </Combobox>
 
-                    {/* Branch selector */}
                     <Combobox
                       value={selectedBranch}
                       onChange={(value) => setSelectedBranch(value)}
-                      items={branches.map((b) => ({
-                        value: b.name,
-                        label: b.name,
-                      }))}
+                      items={[
+                        ...(autoBranch
+                          ? [{ value: autoBranch, label: `${autoBranch} (new)` }]
+                          : []),
+                        ...branches
+                          .filter((b) => b.name !== selectedRepoObj?.defaultBranch)
+                          .map((b) => ({ value: b.name, label: b.name })),
+                      ]}
                       searchable
                       searchPlaceholder="Search branches..."
                       filterFn={(option, query) => option.label.toLowerCase().includes(query)}
                       direction="up"
                       dropdownWidth="w-56"
                       disabled={creating || !selectedRepo || loadingBranches}
-                      triggerClassName="flex max-w-full items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      triggerClassName="flex max-w-full items-center gap-1 text-[12px] text-text-warm-muted tracking-[-0.24px] uppercase hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition"
                     >
-                      <BranchIcon className="w-3.5 h-3.5" />
-                      <span className="truncate max-w-[9rem] sm:max-w-none">
+                      <BranchIcon className="w-3 h-3" />
+                      <span className="truncate max-w-[8rem]">
                         {loadingBranches ? "Loading..." : selectedBranch || "branch"}
                       </span>
                       <ChevronDownIcon className="w-3 h-3" />
                     </Combobox>
 
-                    {/* Model selector */}
-                    <Combobox
-                      value={selectedModel}
-                      onChange={(value) => setSelectedModel(value)}
-                      items={
-                        modelOptions.map((group) => ({
-                          category: group.category,
-                          options: group.models.map((model) => ({
-                            value: model.id,
-                            label: model.name,
-                            description: model.description,
-                          })),
-                        })) as ComboboxGroup[]
-                      }
-                      direction="up"
-                      dropdownWidth="w-56"
-                      disabled={creating}
-                      triggerClassName="flex max-w-full items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition"
-                    >
-                      <ModelIcon className="w-3.5 h-3.5" />
-                      <span className="truncate max-w-[9rem] sm:max-w-none">
-                        {formatModelNameLower(selectedModel)}
-                      </span>
-                    </Combobox>
+                    <span className="text-[12px] text-text-warm-muted tracking-[-0.24px] uppercase">
+                      {formatModelNameLower(selectedModel).toUpperCase()}
+                    </span>
 
-                    {/* Reasoning effort pills */}
                     <ReasoningEffortPills
                       selectedModel={selectedModel}
                       reasoningEffort={reasoningEffort}
@@ -530,11 +447,6 @@ function HomeContent({
                       disabled={creating}
                     />
                   </div>
-
-                  {/* Right side - Agent label */}
-                  <span className="hidden sm:inline text-sm text-muted-foreground">
-                    {category === "idea" ? "idea" : category === "product" ? "build agent" : "chat"}
-                  </span>
                 </div>
               </div>
 

@@ -256,7 +256,8 @@ export type ClientMessage =
   | { type: "stop" }
   | { type: "typing" }
   | { type: "presence"; status: "active" | "idle"; cursor?: { line: number; file: string } }
-  | { type: "fetch_history"; cursor: { timestamp: number; id: string }; limit?: number };
+  | { type: "fetch_history"; cursor: { timestamp: number; id: string }; limit?: number }
+  | { type: "canvas_snapshot_response"; requestId: string; data: unknown };
 
 export type ServerMessage =
   | { type: "pong"; timestamp: number }
@@ -310,7 +311,8 @@ export type ServerMessage =
   | { type: "dev_server_info"; url: string }
   | { type: "mux_info"; url: string }
   | { type: "ssh_info"; host: string; port: number; password: string }
-  | { type: "error"; code: string; message: string };
+  | { type: "error"; code: string; message: string }
+  | { type: "canvas_snapshot_request"; requestId: string };
 
 // Session state sent to clients
 export interface SessionState {

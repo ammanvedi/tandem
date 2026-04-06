@@ -26,6 +26,7 @@ export const SessionInternalPaths = {
   updateTags: "/internal/update-tags",
   cancel: "/internal/cancel",
   childSessionUpdate: "/internal/child-session-update",
+  canvasSnapshot: "/internal/canvas-snapshot",
 } as const;
 
 export type SessionInternalPath = (typeof SessionInternalPaths)[keyof typeof SessionInternalPaths];

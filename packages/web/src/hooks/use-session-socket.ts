@@ -51,6 +51,7 @@ interface UseSessionSocketReturn {
   sendTyping: () => void;
   reconnect: () => void;
   loadOlderEvents: () => void;
+  canvasSnapshotRequestRef: React.MutableRefObject<(() => unknown | null) | null>;
 }
 
 /**
@@ -130,6 +131,7 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
   const mountedRef = useRef(true);
   const subscribedRef = useRef(false);
   const wsTokenRef = useRef<string | null>(null);
+  const canvasSnapshotRequestRef = useRef<(() => unknown | null) | null>(null);
   // Accumulates text during streaming, displayed only on completion to avoid duplicate display.
   // Stores only the latest token since token events contain the full accumulated text (not incremental).
   const pendingTextRef = useRef<{
@@ -398,6 +400,22 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
         case "pong":
           // Health check response
           break;
+
+        case "canvas_snapshot_request": {
+          const snapshotFn = canvasSnapshotRequestRef.current;
+          const snapshotData = snapshotFn ? snapshotFn() : null;
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: "canvas_snapshot_response",
+                requestId: data.requestId,
+                data: snapshotData,
+              })
+            );
+          }
+          break;
+        }
 
         case "error":
           console.error("Session error:", data);
@@ -701,5 +719,6 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
     sendTyping,
     reconnect,
     loadOlderEvents,
+    canvasSnapshotRequestRef,
   };
 }

@@ -138,6 +138,11 @@ export class SessionDO extends DurableObject<Env> {
   private _alarmHandler: AlarmHandler | null = null;
   // Sandbox event processor (lazily initialized)
   private _sandboxEventProcessor: SessionSandboxEventProcessor | null = null;
+  // Pending canvas snapshot requests awaiting client response
+  private pendingCanvasRequests = new Map<
+    string,
+    { resolve: (data: unknown) => void; timer: ReturnType<typeof setTimeout> }
+  >();
 
   // Internal HTTP route table (transport wiring only; handlers remain on SessionDO).
   private readonly routes = createSessionInternalRoutes({
@@ -164,6 +169,7 @@ export class SessionDO extends DurableObject<Env> {
     childSummary: () => this.childSessionsHandler.getChildSummary(),
     cancel: () => this.sessionLifecycleHandler.cancel(),
     childSessionUpdate: (request) => this.childSessionsHandler.childSessionUpdate(request),
+    canvasSnapshot: () => this.handleCanvasSnapshotRequest(),
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -1012,6 +1018,10 @@ export class SessionDO extends DurableObject<Env> {
         case "presence":
           this.presenceService.updatePresence(ws, data);
           break;
+
+        case "canvas_snapshot_response":
+          this.resolveCanvasSnapshot(data.requestId, data.data);
+          break;
       }
     } catch (e) {
       this.log.error("Error processing client message", {
@@ -1332,6 +1342,42 @@ export class SessionDO extends DurableObject<Env> {
    */
   private async stopExecution(options?: { suppressStatusReconcile?: boolean }): Promise<void> {
     await this.messageQueue.stopExecution(options);
+  }
+
+  private static readonly CANVAS_SNAPSHOT_TIMEOUT_MS = 10000;
+
+  /**
+   * Handle an internal canvas snapshot request.
+   * Broadcasts a request to all connected clients and waits for one to respond.
+   */
+  private async handleCanvasSnapshotRequest(): Promise<Response> {
+    const requestId = generateId();
+
+    const snapshotPromise = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingCanvasRequests.delete(requestId);
+        reject(new Error("Canvas snapshot request timed out"));
+      }, SessionDO.CANVAS_SNAPSHOT_TIMEOUT_MS);
+
+      this.pendingCanvasRequests.set(requestId, { resolve, timer });
+    });
+
+    this.broadcast({ type: "canvas_snapshot_request", requestId });
+
+    try {
+      const data = await snapshotPromise;
+      return Response.json({ ok: true, data });
+    } catch {
+      return Response.json({ ok: false, error: "No canvas client responded" }, { status: 504 });
+    }
+  }
+
+  private resolveCanvasSnapshot(requestId: string, data: unknown): void {
+    const pending = this.pendingCanvasRequests.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingCanvasRequests.delete(requestId);
+    pending.resolve(data);
   }
 
   /**

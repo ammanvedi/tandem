@@ -75,26 +75,29 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
     onToggleSidebar: sidebar.toggle,
   });
 
-  // Show loading state
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
       </div>
     );
   }
 
-  // Show sign-in page if not authenticated
   if (!session) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-8">
-        <h1 className="text-4xl font-bold text-foreground">Open-Inspect</h1>
-        <p className="text-muted-foreground max-w-md text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-8 bg-background">
+        <h1
+          className="text-5xl font-bold text-foreground"
+          style={{ fontFamily: "var(--font-logo)" }}
+        >
+          tandem
+        </h1>
+        <p className="text-muted-foreground max-w-md text-center text-sm">
           Background coding agent for your team. Ship faster with AI-powered code changes.
         </p>
         <button
           onClick={() => signIn("github")}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 font-medium hover:opacity-90 transition"
+          className="flex items-center gap-2 bg-surface-button text-foreground px-6 py-3 font-medium hover:bg-surface-button/80 transition rounded-[3px]"
         >
           <GitHubIcon className="w-5 h-5" />
           Sign in with GitHub
@@ -105,7 +108,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
 
   return (
     <SidebarContext.Provider value={sidebar}>
-      <div className="flex h-dvh overflow-hidden">
+      <div className="flex h-dvh overflow-hidden bg-background">
         {/* Mobile: overlay backdrop */}
         {isMobile && (
           <div
@@ -115,7 +118,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
             onClick={sidebar.close}
           />
         )}
-        {/* Sidebar: overlay on mobile, push on desktop */}
+        {/* Sidebar */}
         <div
           className={
             isMobile
