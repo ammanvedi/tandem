@@ -224,88 +224,25 @@ what dies tandem need to turn into
 
 9.
 
-Okay, so we're gonna do a bit of a major upgrade to the UI, I'm going to give you a Figma link and
-you can use the Figma MCP as well as all of your Figma skills to bring it into line with the design
-that I provided. I'm going to go fully through the design and give you details and tell you what to
-watch out for. And I'm going to describe it because there's some parts that are illustrated in the
-Figma. There are some parts that are not. So... Firstly, let's talk about what you should pay
-attention to. Please pay attention to things like spacing and paddings. Please do not pay too much
-attention to the way things are arranged in the Figma because I haven't done a good job of grouping
-things and stuff like that. I just want you to pay attention to how things are structured visually
-and apply that in the best way for a React application. So starting in the top left, we have the
-Tandem logo. This is in a Helvetica font. And then underneath it, we have a sidebar. Now you might
-need to extrapolate a bit here. It's pretty similar to the existing sidebar we have. So actually, I
-probably still want the sidebar open and closed. The Um... I still probably still want the plus
-addition button And I... Still want the settings and account icon, although the settings and account
-icon can go in the little footer. that I've added in the bottom left. And then as a sort of major
-reorganization of how we're doing the sidebar, I still want the ability to search sessions. You can
-hide the automations. And also, I don't want this distinction anymore between ideas, products. and
-chats. I don't. I think we need that. anymore. or I'll come back, but I want you to keep the notion
-of However that's achieved, like the tagging notion, I think we can keep that. Just I don't want the
-arrangement in the chat. I just want... There to be two sections. One of them is my work. So this is
-everything that was created by me. And then there is organizations or organization. Then we'll just
-remove that filter and show everything. But you can see the way things are organized is as an
-example, I have like playground project and then I have the names underneath. So I want us to
-enforce that every time we create something, Um... It has to have a new branch. And it has to be
-given a... Name. And... the branch can be derived from the name so then what would display in the
-sidebar is actually His each. repository and you can remove the organization name. So I don't want
-to see XYZ slash this. I just want to see the repository name, and then underneath it, I want to see
-all of my actual conversations, as the like title of that conversation that I've given it. And
-that's what I'm saying we should enforce. So that's the sidebar. And then if you look to the center
-of the view, there's nothing in there at the moment. Actually, we are going to... Come back to that
-after. So I just want you to leave that there for now. But then on the right hand side of the view,
-we have the new chat window. So I want you to pay very special attention to the colors that are
-being used. the spacing, border radiuses, effects such as drop shadows, Yeah. And then I want you to
-as much as possible look at the design, understand the commonalities. So for example, the button
-that says plan and the button with the waveform icon, the button with the arrow icon in the chat
-input, Um, All of these are just buttons. So actually what we should be doing here is going into our
-design system, updating the button and then using that. These are buttons of size 24 by 24 so we
-should make sure that it works. The The logo font is in Helvetica, but the actual font that I'm
-using elsewhere, and you should pay attention to font sizes, is the IBM Plex. IBM Plex Mono. I want
-you to be able to use that. you Starting from the top of the chat view, we have obviously the
-container. Please pay attention to the 24 pixel margin. You can use the use stick to bottom library.
-I believe that it's quite good for sticking to the bottom. Then we have this top floating bar with a
-background blur in it, and it shows a few things. So on the right-hand side, it's showing At the
-moment in the UI, we have this X prompt engineers, and it shows the icons of the prompt engineers.
-Here we have the same thing, but in a more square type style. Then on the right-hand side of that
-sort of header bar, we have this new display. New display is showing Whether the sandbox itself is
-either getting ready or is ready and the ready text I want to be Uh I want the container for that
-text to be a fixed width. And if there's too much text, I want it to sort of scroll like a, you
-know, like a train, like the things on the tube in London where they kind of scroll across like
-that. Um, And then underneath is the memory usage and then a graph of the memory usage. So at the
-moment we don't expose that, but what you can do is just add a mock data source from that where we
-can keep polling and display that in this sort of in a dot matrix. style basically and when it gets
-too high you should Uh, mark the whole thing as Red. Right. So then underneath we have the We have
-the users chat messages on the right hand side and the agent chat messages on the left hand side. So
-we actually have the code to render these at the moment. It's just the styling and you can I think
-include Um, Just for now, include the way that it's formatted already. So I think in the messages we
-have like assistant or you or whoever sent the message. Then we have the date time, then we have the
-content of the message, and we have execution complete. Um... So yeah, so if that's for the
-messages, just make sure it matches the style, the colors, et cetera. Then, in the sort of above the
-chat input, we have this other dot matrix. Now, this is just a cool little way of displaying that
-the chat is in progress. So whenever we're generating the response, I want to show this little
-random do-do-do-do-do-do type waveform here. Um, with a little bit of glow on it. I want it to be a
-cool little glow. Then let's have a look at the chat input. The chat input, the design is really
-important to get right. So like I said before, please update the system buttons so that they can be
-used in this fashion. You might need to create Um... Yeah, you might need to pay attention to the
-fact that the icon only buttons Um, They have a six pixel padding all around, whereas the button
-with an icon, has a four-pix relative to the text up and down, and then a four pics on the left of
-the icon and an eight pics on the right. right of the icon but please use your knowledge of visual
-balance in general to understand what is the best to apply here. Then inside the input we have
-obviously the text that the user is going to add. We also have the button which should be able to
-change the Mode? that open code is using. We then have a voice input button. Don't worry about
-actual implementation of that for the moment. And then we have the send button, which I believe we
-have already. And you can use the same logic to enable and disable that. you Um... Then we have a
-display of which model is being used. And it's thinking level. We also have that in the existing UI.
-Then in the bottom right, we have an indication of what the branch is. And we are using for all of
-these icons, Lucide icon set. So please install Lucide icon set for React and use that. So please
-create a detailed plan. Make sure that each stage that I've mentioned while I've been talking to you
-is covered in the plan. And then we will execute on it. After that, we will consider what happens in
-the center of the view. I also want you to consider that we have the sidebar. We have the central
-view. And we have the left-hand panel, which is the chat. Now, I also want this to function on
-mobile. And On mobile, I want this central view is going to be made up of one to N basically tabs
-that can be tabbed through. On mobile, I want to have those tabs, plus I want to have a tab for
-chat. So you'll be able to see the chat or these other views. Thank you. Yeah. So yeah, that's it.
-Please come up with a plan to achieve this. Make sure you understand the existing code base. Make
-sure you use your Figma skills.
-https://www.figma.com/design/yHzmwv6od7eEBk60VDr1gm/Tandem?node-id=2012-11&t=N24FLruWo3FQOO1R-11
+---
+
+TODO before presentation 0. fix empty dir problem
+
+1. make the views only render when ther can connect / are ready
+
+- fix sidebar spacing
+- fix header
+- add ability to markup images and for agent to understand this
+- add vercel agent borwser
+- add in a more complete dev journey
+- add open in cursor button
+- add open in new tab button
+
+1. fix refero
+2. make sure we can upload images
+
+- make sure agent can read from canvas
+- make sure agent can access the UI to navigate the user
+
+3. start personal crm project
+4.
