@@ -37,7 +37,7 @@ The control plane provides:
 │  │  └────────────────┘                                       │   │
 │  └───────────────────────────────────────────────────────────┘   │
 │  ┌───────────────────────────────────────────────────────────┐   │
-│  │              D1 Database (repo-scoped secrets)              │   │
+│  │     D1 Database (chats, sessions, secrets, settings)       │   │
 │  └───────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -82,6 +82,24 @@ The control plane provides:
 When `headBranch` is omitted, control-plane resolves it from session state and finally falls back to
 the generated `open-inspect/<session>` branch.
 
+### Chats
+
+Chats are the top-level grouping entity. Each chat contains one or more sessions and stores canvas
+layout state.
+
+| Endpoint                     | Method | Description                      |
+| ---------------------------- | ------ | -------------------------------- |
+| `/chats`                     | GET    | List chats                       |
+| `/chats`                     | POST   | Create chat with initial session |
+| `/chats/:id`                 | GET    | Get chat with sessions           |
+| `/chats/:id`                 | PATCH  | Update title or canvas state     |
+| `/chats/:id/archive`         | POST   | Archive chat and its sessions    |
+| `/chats/:id/sessions`        | GET    | List sessions in chat            |
+| `/chats/:id/sessions`        | POST   | Add new session to chat          |
+| `/chats/:id/fork/:sessionId` | POST   | Fork session within chat         |
+
+When creating a session via `POST /sessions`, a wrapping chat is automatically created.
+
 ### Repositories
 
 | Endpoint                           | Method | Description          |
@@ -97,37 +115,41 @@ the generated `open-inspect/<session>` branch.
 
 ### Client → Server Messages
 
-| Type        | Description        | Payload                     |
-| ----------- | ------------------ | --------------------------- |
-| `ping`      | Health check       | `{}`                        |
-| `subscribe` | Join session       | `{ token, clientId }`       |
-| `prompt`    | Send prompt        | `{ content, attachments? }` |
-| `stop`      | Stop execution     | `{}`                        |
-| `typing`    | User typing (warm) | `{}`                        |
-| `presence`  | Update presence    | `{ status, cursor? }`       |
+| Type                         | Description                  | Payload                     |
+| ---------------------------- | ---------------------------- | --------------------------- |
+| `ping`                       | Health check                 | `{}`                        |
+| `subscribe`                  | Join session                 | `{ token, clientId }`       |
+| `prompt`                     | Send prompt                  | `{ content, attachments? }` |
+| `stop`                       | Stop execution               | `{}`                        |
+| `typing`                     | User typing (warm)           | `{}`                        |
+| `presence`                   | Update presence              | `{ status, cursor? }`       |
+| `canvas_screenshot_response` | Reply with canvas screenshot | `{ dataUrl }`               |
+| `canvas_update_response`     | Acknowledge canvas update    | `{ success }`               |
 
 ### Server → Client Messages
 
-| Type               | Description                   |
-| ------------------ | ----------------------------- |
-| `pong`             | Health check response         |
-| `subscribed`       | Confirm subscription          |
-| `prompt_queued`    | Confirm prompt queued         |
-| `sandbox_event`    | Event from sandbox            |
-| `presence_sync`    | Full presence state           |
-| `presence_update`  | Presence change               |
-| `presence_leave`   | Participant disconnected      |
-| `sandbox_spawning` | Sandbox is being created      |
-| `sandbox_warming`  | Sandbox warming               |
-| `sandbox_status`   | Sandbox status update         |
-| `sandbox_ready`    | Sandbox ready                 |
-| `sandbox_error`    | Sandbox error occurred        |
-| `sandbox_warning`  | Sandbox warning message       |
-| `sandbox_restored` | Restored from snapshot        |
-| `artifact_created` | New artifact (PR, screenshot) |
-| `snapshot_saved`   | Filesystem snapshot saved     |
-| `session_status`   | Session status change         |
-| `error`            | Error occurred                |
+| Type                        | Description                   |
+| --------------------------- | ----------------------------- |
+| `pong`                      | Health check response         |
+| `subscribed`                | Confirm subscription          |
+| `prompt_queued`             | Confirm prompt queued         |
+| `sandbox_event`             | Event from sandbox            |
+| `presence_sync`             | Full presence state           |
+| `presence_update`           | Presence change               |
+| `presence_leave`            | Participant disconnected      |
+| `sandbox_spawning`          | Sandbox is being created      |
+| `sandbox_warming`           | Sandbox warming               |
+| `sandbox_status`            | Sandbox status update         |
+| `sandbox_ready`             | Sandbox ready                 |
+| `sandbox_error`             | Sandbox error occurred        |
+| `sandbox_warning`           | Sandbox warning message       |
+| `sandbox_restored`          | Restored from snapshot        |
+| `artifact_created`          | New artifact (PR, screenshot) |
+| `snapshot_saved`            | Filesystem snapshot saved     |
+| `session_status`            | Session status change         |
+| `canvas_screenshot_request` | Request canvas screenshot     |
+| `canvas_update_request`     | Request canvas modification   |
+| `error`                     | Error occurred                |
 
 ## Development
 

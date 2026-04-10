@@ -9,12 +9,20 @@ Next.js (React), Terraform.
 Three tiers connected by WebSockets:
 
 1. **Web Client** (Next.js on Vercel or Cloudflare Workers via OpenNext) — UI with GitHub OAuth,
-   session dashboard, real-time streaming
+   chat/session dashboard, canvas workspace, real-time streaming
 2. **Control Plane** (Cloudflare Workers + Durable Objects) — session lifecycle, WebSocket hub,
    GitHub/auth integration. Each session is a Durable Object with SQLite storage. Uses D1 for
-   session index, repo metadata, and encrypted repo secrets.
+   session index, chat index, repo metadata, and encrypted repo secrets.
 3. **Data Plane** (Modal, Python) — sandboxed environments running coding agents. Manages sandbox
    creation, warm pools, snapshots.
+
+**Key abstractions:**
+
+- **Chat** — top-level grouping entity shown in the sidebar. Each chat contains one or more sessions
+  and stores canvas layout state in D1. Created automatically when sessions are spawned.
+- **Session** — a sandbox-backed coding session. Sessions belong to a chat via `chat_id`.
+- **Canvas workspace** — the `/chat/:id` page renders all sessions as clusters on a DGM.js canvas
+  with iframe cards (dev server, VNC) and floating chat panels per sandbox.
 
 **Bot integrations** — all Cloudflare Workers using Hono:
 

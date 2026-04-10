@@ -37,6 +37,7 @@ import {
 } from "../source-control";
 import { DEFAULT_MODEL, isValidReasoningEffort } from "../utils/models";
 import type {
+  CanvasOperation,
   Env,
   ClientInfo,
   ClientMessage,
@@ -170,6 +171,9 @@ export class SessionDO extends DurableObject<Env> {
     cancel: () => this.sessionLifecycleHandler.cancel(),
     childSessionUpdate: (request) => this.childSessionsHandler.childSessionUpdate(request),
     canvasSnapshot: () => this.handleCanvasSnapshotRequest(),
+    canvasScreenshot: () => this.handleCanvasScreenshotRequest(),
+    canvasUpdate: (request) => this.handleCanvasUpdateRequest(request),
+    snapshot: () => this.handleSnapshotRequest(),
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -970,6 +974,39 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   /**
+   * Handle an internal snapshot request (e.g. for fork).
+   * Returns the snapshot image ID synchronously.
+   */
+  private async handleSnapshotRequest(): Promise<Response> {
+    const sandbox = this.repository.getSandbox();
+    if (!sandbox?.modal_object_id) {
+      return Response.json({ ok: false, error: "No sandbox to snapshot" }, { status: 400 });
+    }
+
+    // If there's already a recent snapshot image ID, return it
+    if (sandbox.snapshot_image_id) {
+      return Response.json({ ok: true, imageId: sandbox.snapshot_image_id });
+    }
+
+    try {
+      await this.triggerSnapshot("fork");
+      const updatedSandbox = this.repository.getSandbox();
+      if (updatedSandbox?.snapshot_image_id) {
+        return Response.json({ ok: true, imageId: updatedSandbox.snapshot_image_id });
+      }
+      return Response.json(
+        { ok: false, error: "Snapshot did not produce an image ID" },
+        { status: 500 }
+      );
+    } catch (e) {
+      return Response.json(
+        { ok: false, error: e instanceof Error ? e.message : String(e) },
+        { status: 500 }
+      );
+    }
+  }
+
+  /**
    * Handle messages from sandbox.
    */
   private async handleSandboxMessage(ws: WebSocket, message: string): Promise<void> {
@@ -1021,6 +1058,17 @@ export class SessionDO extends DurableObject<Env> {
 
         case "canvas_snapshot_response":
           this.resolveCanvasSnapshot(data.requestId, data.data);
+          break;
+
+        case "canvas_screenshot_response":
+          this.resolveCanvasRequest(data.requestId, data.dataUrl);
+          break;
+
+        case "canvas_update_response":
+          this.resolveCanvasRequest(data.requestId, {
+            success: data.success,
+            error: data.error,
+          });
           break;
       }
     } catch (e) {
@@ -1378,6 +1426,59 @@ export class SessionDO extends DurableObject<Env> {
     clearTimeout(pending.timer);
     this.pendingCanvasRequests.delete(requestId);
     pending.resolve(data);
+  }
+
+  private resolveCanvasRequest(requestId: string, data: unknown): void {
+    this.resolveCanvasSnapshot(requestId, data);
+  }
+
+  private async handleCanvasScreenshotRequest(): Promise<Response> {
+    const requestId = generateId();
+
+    const promise = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingCanvasRequests.delete(requestId);
+        reject(new Error("Canvas screenshot request timed out"));
+      }, SessionDO.CANVAS_SNAPSHOT_TIMEOUT_MS);
+
+      this.pendingCanvasRequests.set(requestId, { resolve, timer });
+    });
+
+    this.broadcast({ type: "canvas_screenshot_request", requestId });
+
+    try {
+      const data = await promise;
+      return Response.json({ ok: true, dataUrl: data });
+    } catch {
+      return Response.json({ ok: false, error: "No canvas client responded" }, { status: 504 });
+    }
+  }
+
+  private async handleCanvasUpdateRequest(request: Request): Promise<Response> {
+    const requestId = generateId();
+    const body = (await request.json()) as { operations: unknown[] };
+
+    const promise = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingCanvasRequests.delete(requestId);
+        reject(new Error("Canvas update request timed out"));
+      }, SessionDO.CANVAS_SNAPSHOT_TIMEOUT_MS);
+
+      this.pendingCanvasRequests.set(requestId, { resolve, timer });
+    });
+
+    this.broadcast({
+      type: "canvas_update_request",
+      requestId,
+      operations: body.operations as CanvasOperation[],
+    });
+
+    try {
+      const data = await promise;
+      return Response.json({ ok: true, result: data });
+    } catch {
+      return Response.json({ ok: false, error: "No canvas client responded" }, { status: 504 });
+    }
   }
 
   /**

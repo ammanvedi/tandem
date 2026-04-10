@@ -36,6 +36,9 @@ export interface SessionInternalRouteHandlers {
   cancel: SessionInternalRouteHandler;
   childSessionUpdate: SessionInternalRouteHandler;
   canvasSnapshot: SessionInternalRouteHandler;
+  canvasScreenshot: SessionInternalRouteHandler;
+  canvasUpdate: SessionInternalRouteHandler;
+  snapshot: SessionInternalRouteHandler;
 }
 
 /**
@@ -94,5 +97,12 @@ export function createSessionInternalRoutes(
       handler: handlers.childSessionUpdate,
     },
     { method: "POST", path: SessionInternalPaths.canvasSnapshot, handler: handlers.canvasSnapshot },
+    {
+      method: "POST",
+      path: SessionInternalPaths.canvasScreenshot,
+      handler: handlers.canvasScreenshot,
+    },
+    { method: "POST", path: SessionInternalPaths.canvasUpdate, handler: handlers.canvasUpdate },
+    { method: "POST", path: SessionInternalPaths.snapshot, handler: handlers.snapshot },
   ];
 }

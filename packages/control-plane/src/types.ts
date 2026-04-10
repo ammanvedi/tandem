@@ -14,6 +14,7 @@ import type {
 export type {
   ArtifactType,
   Attachment,
+  CanvasOperation,
   ClientMessage,
   CreateSessionRequest,
   CreateSessionResponse,

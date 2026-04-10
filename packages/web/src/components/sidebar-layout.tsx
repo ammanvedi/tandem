@@ -45,7 +45,6 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
       ? SIDEBAR_SESSIONS_KEY
       : null
   );
-
   const handleNewSession = useCallback(() => {
     setIsCommandMenuOpen(false);
     if (isMobile) {

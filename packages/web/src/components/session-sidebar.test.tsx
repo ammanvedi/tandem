@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SWRConfig } from "swr";
 import { MOBILE_LONG_PRESS_MS, SessionSidebar } from "./session-sidebar";
-import { buildSessionsPageKey, SIDEBAR_SESSIONS_KEY } from "@/lib/session-list";
+import { buildChatsPageKey, SIDEBAR_CHATS_KEY } from "@/lib/session-list";
 
 expect.extend(matchers);
 
@@ -49,13 +49,14 @@ afterEach(() => {
   mockUseIsMobile.mockReturnValue(false);
 });
 
-function createSession(index: number) {
+function createChat(index: number) {
   return {
-    id: `session-${index}`,
-    title: `Session ${index}`,
+    id: `chat-${index}`,
+    title: `Chat ${index}`,
     repoOwner: "open-inspect",
     repoName: "background-agents",
     status: "active",
+    canvasState: null,
     createdAt: 1000 + index,
     updatedAt: 2000 + index,
   };
@@ -70,18 +71,18 @@ function jsonResponse(body: unknown) {
 
 describe("SessionSidebar", () => {
   it("loads the next page when scrolled near the bottom", async () => {
-    const firstPage = Array.from({ length: 50 }, (_, index) => createSession(index + 1));
-    const secondPage = Array.from({ length: 5 }, (_, index) => createSession(index + 51));
+    const firstPage = Array.from({ length: 50 }, (_, index) => createChat(index + 1));
+    const secondPage = Array.from({ length: 5 }, (_, index) => createChat(index + 51));
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
-      if (url === SIDEBAR_SESSIONS_KEY) {
-        return jsonResponse({ sessions: firstPage, hasMore: true });
+      if (url === SIDEBAR_CHATS_KEY) {
+        return jsonResponse({ chats: firstPage, hasMore: true });
       }
 
-      if (url === buildSessionsPageKey({ excludeStatus: "archived", offset: 50 })) {
-        return jsonResponse({ sessions: secondPage, hasMore: false });
+      if (url === buildChatsPageKey({ excludeStatus: "archived", offset: 50 })) {
+        return jsonResponse({ chats: secondPage, hasMore: false });
       }
 
       throw new Error(`Unexpected fetch for ${url}`);
@@ -105,7 +106,7 @@ describe("SessionSidebar", () => {
       </SWRConfig>
     );
 
-    expect(await screen.findByText("Session 1")).toBeInTheDocument();
+    expect(await screen.findByText("Chat 1")).toBeInTheDocument();
 
     const scrollContainer = container.querySelector(".overflow-y-auto") as HTMLDivElement;
     let scrollTop = 0;
@@ -129,10 +130,10 @@ describe("SessionSidebar", () => {
     scrollTop = 1705;
     fireEvent.scroll(scrollContainer);
 
-    expect(await screen.findByText("Session 55")).toBeInTheDocument();
+    expect(await screen.findByText("Chat 55")).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        buildSessionsPageKey({ excludeStatus: "archived", offset: 50 })
+        buildChatsPageKey({ excludeStatus: "archived", offset: 50 })
       );
     });
   });
@@ -143,7 +144,7 @@ describe("SessionSidebar", () => {
     render(
       <SWRConfig
         value={{
-          fallback: { [SIDEBAR_SESSIONS_KEY]: { sessions: [createSession(1)], hasMore: false } },
+          fallback: { [SIDEBAR_CHATS_KEY]: { chats: [createChat(1)], hasMore: false } },
           dedupingInterval: 0,
           revalidateOnFocus: false,
         }}
@@ -152,7 +153,7 @@ describe("SessionSidebar", () => {
       </SWRConfig>
     );
 
-    const link = await screen.findByRole("link", { name: /session 1/i });
+    const link = await screen.findByRole("link", { name: /chat 1/i });
     fireEvent.click(link);
 
     expect(screen.queryByText("Rename")).not.toBeInTheDocument();
@@ -164,7 +165,7 @@ describe("SessionSidebar", () => {
     render(
       <SWRConfig
         value={{
-          fallback: { [SIDEBAR_SESSIONS_KEY]: { sessions: [createSession(1)], hasMore: false } },
+          fallback: { [SIDEBAR_CHATS_KEY]: { chats: [createChat(1)], hasMore: false } },
           dedupingInterval: 0,
           revalidateOnFocus: false,
         }}
@@ -173,7 +174,7 @@ describe("SessionSidebar", () => {
       </SWRConfig>
     );
 
-    const link = await screen.findByRole("link", { name: /session 1/i });
+    const link = await screen.findByRole("link", { name: /chat 1/i });
     vi.useFakeTimers();
     fireEvent.touchStart(link, { touches: [{ clientX: 20, clientY: 20 }] });
     act(() => {

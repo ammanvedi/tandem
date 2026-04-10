@@ -33,6 +33,9 @@ describe("createSessionInternalRoutes", () => {
       cancel: noopHandler(),
       childSessionUpdate: noopHandler(),
       canvasSnapshot: noopHandler(),
+      canvasScreenshot: noopHandler(),
+      canvasUpdate: noopHandler(),
+      snapshot: noopHandler(),
     });
 
     const methodPathSet = new Set(routes.map((route) => `${route.method} ${route.path}`));
@@ -63,6 +66,9 @@ describe("createSessionInternalRoutes", () => {
         `POST ${SessionInternalPaths.cancel}`,
         `POST ${SessionInternalPaths.childSessionUpdate}`,
         `POST ${SessionInternalPaths.canvasSnapshot}`,
+        `POST ${SessionInternalPaths.canvasScreenshot}`,
+        `POST ${SessionInternalPaths.canvasUpdate}`,
+        `POST ${SessionInternalPaths.snapshot}`,
       ])
     );
   });

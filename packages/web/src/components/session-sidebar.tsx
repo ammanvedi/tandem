@@ -17,10 +17,10 @@ function formatSessionDate(timestamp: number): string {
   return `${month} ${day}, ${date.getFullYear()}`;
 }
 import {
-  buildSessionsPageKey,
-  mergeUniqueSessions,
-  SIDEBAR_SESSIONS_KEY,
-  type SessionListResponse,
+  buildChatsPageKey,
+  mergeUniqueChats,
+  SIDEBAR_CHATS_KEY,
+  type ChatListResponse,
 } from "@/lib/session-list";
 import { SHORTCUT_LABELS } from "@/lib/keyboard-shortcuts";
 import { useIsMobile } from "@/hooks/use-media-query";
@@ -43,24 +43,22 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Session } from "@open-inspect/shared";
+import type { Session, Chat } from "@open-inspect/shared";
 
 export type SessionItem = Session;
+export type ChatItem = Chat;
 
-type SessionsResponse = { sessions: SessionItem[] };
+type ChatsResponse = { chats: ChatItem[] };
 
 export const MOBILE_LONG_PRESS_MS = 450;
 const MOBILE_LONG_PRESS_MOVE_THRESHOLD_PX = 10;
 
 export function buildSessionHref(session: SessionItem) {
-  return {
-    pathname: `/session/${session.id}`,
-    query: {
-      repoOwner: session.repoOwner,
-      repoName: session.repoName,
-      ...(session.title ? { title: session.title } : {}),
-    },
-  };
+  return `/session/${session.id}`;
+}
+
+export function buildChatHref(chat: ChatItem) {
+  return `/chat/${chat.id}`;
 }
 
 interface SessionSidebarProps {
@@ -75,7 +73,7 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
   const { data: authSession } = useSession();
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
-  const [extraSessions, setExtraSessions] = useState<SessionItem[]>([]);
+  const [extraChats, setExtraChats] = useState<ChatItem[]>([]);
   const [hasMorePages, setHasMorePages] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -86,92 +84,79 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
   const [activeTab, setActiveTab] = useState<SidebarTab>("my-work");
   const [collapsedRepos, setCollapsedRepos] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading: loading } = useSWR<SessionListResponse>(
-    authSession ? SIDEBAR_SESSIONS_KEY : null
+  const { data, isLoading: loading } = useSWR<ChatListResponse>(
+    authSession ? SIDEBAR_CHATS_KEY : null
   );
-  const firstPageSessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
+  const firstPageChats = useMemo(() => data?.chats ?? [], [data?.chats]);
 
   const prevDataRef = useRef(data);
-  let effectiveExtraSessions = extraSessions;
+  let effectiveExtraChats = extraChats;
   if (prevDataRef.current !== data) {
     prevDataRef.current = data;
-    effectiveExtraSessions = [];
+    effectiveExtraChats = [];
   }
 
   useEffect(() => {
     if (!data) return;
-    setExtraSessions([]);
+    setExtraChats([]);
     setHasMorePages(data.hasMore);
     setLoadingMore(false);
-    offsetRef.current = firstPageSessions.length;
+    offsetRef.current = firstPageChats.length;
     hasMoreRef.current = data.hasMore;
     loadingMoreRef.current = false;
-  }, [data, firstPageSessions.length]);
+  }, [data, firstPageChats.length]);
 
-  const loadMoreSessions = useCallback(async () => {
+  const loadMoreChats = useCallback(async () => {
     if (!authSession || loadingMoreRef.current || !hasMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const response = await fetch(
-        buildSessionsPageKey({ excludeStatus: "archived", offset: offsetRef.current })
+        buildChatsPageKey({ excludeStatus: "archived", offset: offsetRef.current })
       );
       if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
-      const page: SessionListResponse = await response.json();
-      const fetched = page.sessions ?? [];
-      setExtraSessions((prev) => mergeUniqueSessions(prev, fetched));
+      const page: ChatListResponse = await response.json();
+      const fetched = page.chats ?? [];
+      setExtraChats((prev) => mergeUniqueChats(prev, fetched));
       setHasMorePages(page.hasMore);
       offsetRef.current += fetched.length;
       hasMoreRef.current = page.hasMore;
     } catch (error) {
-      console.error("Failed to fetch additional sessions:", error);
+      console.error("Failed to fetch additional chats:", error);
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }, [authSession]);
 
-  const maybeLoadMoreSessions = useCallback(() => {
+  const maybeLoadMore = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 96;
-    if (nearBottom) void loadMoreSessions();
-  }, [loadMoreSessions]);
+    if (nearBottom) void loadMoreChats();
+  }, [loadMoreChats]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || loading || loadingMore || !hasMorePages) return;
     if (container.clientHeight > 0 && container.scrollHeight <= container.clientHeight) {
-      void loadMoreSessions();
+      void loadMoreChats();
     }
-  }, [
-    hasMorePages,
-    loading,
-    loadingMore,
-    loadMoreSessions,
-    firstPageSessions.length,
-    extraSessions.length,
-  ]);
+  }, [hasMorePages, loading, loadingMore, loadMoreChats, firstPageChats.length, extraChats.length]);
 
-  const sessions = useMemo(
-    () => mergeUniqueSessions(firstPageSessions, effectiveExtraSessions),
-    [firstPageSessions, effectiveExtraSessions]
+  const chats = useMemo(
+    () => mergeUniqueChats(firstPageChats, effectiveExtraChats),
+    [firstPageChats, effectiveExtraChats]
   );
 
-  const sessionsByRepo = useMemo(() => {
-    const filtered = sessions
-      .filter((s) => s.status !== "archived")
-      .filter((_s) => {
-        if (activeTab === "my-work") {
-          return true; // TODO: filter by current user's sessions when creator field is available
-        }
-        return true;
-      })
-      .filter((s) => {
+  const chatsByRepo = useMemo(() => {
+    const filtered = chats
+      .filter((c) => c.status !== "archived")
+      .filter((c) => {
         if (!searchQuery) return true;
         const query = searchQuery.toLowerCase();
-        const title = s.title?.toLowerCase() || "";
-        const repo = s.repoName?.toLowerCase() || "";
+        const title = c.title?.toLowerCase() || "";
+        const repo = c.repoName?.toLowerCase() || "";
         return title.includes(query) || repo.includes(query);
       });
 
@@ -181,45 +166,45 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
       return bTime - aTime;
     });
 
-    const byRepo = new Map<string, SessionItem[]>();
-    for (const s of sorted) {
-      const key = s.repoName || "Unknown";
+    const byRepo = new Map<string, ChatItem[]>();
+    for (const c of sorted) {
+      const key = c.repoName || "Unknown";
       const group = byRepo.get(key) ?? [];
-      group.push(s);
+      group.push(c);
       byRepo.set(key, group);
     }
 
     return byRepo;
-  }, [sessions, searchQuery, activeTab]);
+  }, [chats, searchQuery]);
 
-  const currentSessionId = pathname?.startsWith("/session/") ? pathname.split("/")[2] : null;
+  const currentChatId = pathname?.startsWith("/chat/") ? pathname.split("/")[2] : null;
 
   const toggleRepo = useCallback((key: string) => {
     setCollapsedRepos((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const handleArchive = useCallback(async (sessionId: string) => {
-    const updateSessions = (data?: SessionsResponse): SessionsResponse => ({
-      sessions: (data?.sessions ?? []).filter((s) => s.id !== sessionId),
+  const handleArchive = useCallback(async (chatId: string) => {
+    const updateChats = (data?: ChatsResponse): ChatsResponse => ({
+      chats: (data?.chats ?? []).filter((c) => c.id !== chatId),
     });
 
     try {
-      await mutate<SessionsResponse>(
-        SIDEBAR_SESSIONS_KEY,
-        async (currentData?: SessionsResponse) => {
-          const response = await fetch(`/api/sessions/${sessionId}/archive`, { method: "POST" });
-          if (!response.ok) throw new Error("Failed to archive session");
-          return updateSessions(currentData);
+      await mutate<ChatsResponse>(
+        SIDEBAR_CHATS_KEY,
+        async (currentData?: ChatsResponse) => {
+          const response = await fetch(`/api/chats/${chatId}/archive`, { method: "POST" });
+          if (!response.ok) throw new Error("Failed to archive chat");
+          return updateChats(currentData);
         },
         {
-          optimisticData: updateSessions,
+          optimisticData: updateChats,
           rollbackOnError: true,
           populateCache: true,
           revalidate: true,
         }
       );
     } catch {
-      console.error("Failed to archive session");
+      console.error("Failed to archive chat");
     }
   }, []);
 
@@ -240,8 +225,8 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
             variant="ghost"
             size="icon-xs"
             onClick={onNewSession}
-            title={`New session (${SHORTCUT_LABELS.NEW_SESSION})`}
-            aria-label={`New session (${SHORTCUT_LABELS.NEW_SESSION})`}
+            title={`New chat (${SHORTCUT_LABELS.NEW_SESSION})`}
+            aria-label={`New chat (${SHORTCUT_LABELS.NEW_SESSION})`}
           >
             <PlusIcon className="w-4 h-4" />
           </Button>
@@ -288,7 +273,7 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search sessions..."
+            placeholder="Search chats..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7 text-xs"
@@ -296,30 +281,26 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
         </div>
       </div>
 
-      {/* Session list */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto"
-        onScroll={maybeLoadMoreSessions}
-      >
+      {/* Chat list */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={maybeLoadMore}>
         {loading ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-muted-foreground" />
           </div>
-        ) : sessions.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No sessions yet</div>
+        ) : chats.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No chats yet</div>
         ) : (
           <>
-            {Array.from(sessionsByRepo.entries()).map(([repoName, repoSessions]) => (
-              <RepoGroup
+            {Array.from(chatsByRepo.entries()).map(([repoName, repoChats]) => (
+              <ChatRepoGroup
                 key={repoName}
                 repoName={repoName}
-                sessions={repoSessions}
-                currentSessionId={currentSessionId}
+                chats={repoChats}
+                currentChatId={currentChatId}
                 isMobile={isMobile}
                 isCollapsed={collapsedRepos[repoName] ?? false}
                 onToggle={() => toggleRepo(repoName)}
-                onSessionSelect={onSessionSelect}
+                onChatSelect={onSessionSelect}
                 onArchive={handleArchive}
               />
             ))}
@@ -355,23 +336,23 @@ export function SessionSidebar({ onNewSession, onToggle, onSessionSelect }: Sess
   );
 }
 
-function RepoGroup({
+function ChatRepoGroup({
   repoName,
-  sessions,
-  currentSessionId,
+  chats,
+  currentChatId,
   isMobile,
   isCollapsed,
   onToggle,
-  onSessionSelect,
+  onChatSelect,
   onArchive,
 }: {
   repoName: string;
-  sessions: SessionItem[];
-  currentSessionId: string | null;
+  chats: ChatItem[];
+  currentChatId: string | null;
   isMobile: boolean;
   isCollapsed: boolean;
   onToggle: () => void;
-  onSessionSelect?: () => void;
+  onChatSelect?: () => void;
   onArchive: (id: string) => void;
 }) {
   return (
@@ -392,13 +373,13 @@ function RepoGroup({
             transition={{ duration: 0.15 }}
             style={{ overflow: "hidden" }}
           >
-            {sessions.map((session) => (
-              <SessionListItem
-                key={session.id}
-                session={session}
-                isActive={session.id === currentSessionId}
+            {chats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                isActive={chat.id === currentChatId}
                 isMobile={isMobile}
-                onSessionSelect={onSessionSelect}
+                onChatSelect={onChatSelect}
                 onArchive={onArchive}
               />
             ))}
@@ -441,21 +422,20 @@ function UserMenu({ user }: { user?: { name?: string | null; image?: string | nu
   );
 }
 
-function SessionListItem({
-  session,
+function ChatListItem({
+  chat,
   isActive,
   isMobile,
-  onSessionSelect,
+  onChatSelect,
   onArchive,
 }: {
-  session: SessionItem;
+  chat: ChatItem;
   isActive: boolean;
   isMobile: boolean;
-  onSessionSelect?: () => void;
+  onChatSelect?: () => void;
   onArchive?: (id: string) => void;
 }) {
-  const displayTitle = session.title || session.baseBranch || formatSessionDate(session.createdAt);
-  const isAgentActive = session.status === "active";
+  const displayTitle = chat.title || formatSessionDate(chat.createdAt);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [title, setTitle] = useState(displayTitle);
@@ -487,26 +467,26 @@ function SessionListItem({
     const previousTitle = displayTitle;
     setIsRenaming(false);
 
-    const updateSessionsTitle = (data?: SessionsResponse): SessionsResponse => ({
-      sessions: (data?.sessions ?? []).map((s) =>
-        s.id === session.id ? { ...s, title: trimmed, updatedAt: Date.now() } : s
+    const updateChatsTitle = (data?: ChatsResponse): ChatsResponse => ({
+      chats: (data?.chats ?? []).map((c) =>
+        c.id === chat.id ? { ...c, title: trimmed, updatedAt: Date.now() } : c
       ),
     });
 
     try {
-      await mutate<SessionsResponse>(
-        "/api/sessions",
-        async (currentData?: SessionsResponse) => {
-          const response = await fetch(`/api/sessions/${session.id}/title`, {
+      await mutate<ChatsResponse>(
+        SIDEBAR_CHATS_KEY,
+        async (currentData?: ChatsResponse) => {
+          const response = await fetch(`/api/chats/${chat.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title: trimmed }),
           });
-          if (!response.ok) throw new Error("Failed to update session title");
-          return updateSessionsTitle(currentData);
+          if (!response.ok) throw new Error("Failed to update chat title");
+          return updateChatsTitle(currentData);
         },
         {
-          optimisticData: updateSessionsTitle,
+          optimisticData: updateChatsTitle,
           rollbackOnError: true,
           populateCache: true,
           revalidate: true,
@@ -591,14 +571,14 @@ function SessionListItem({
         />
       ) : (
         <Link
-          href={buildSessionHref(session)}
+          href={buildChatHref(chat)}
           onClick={(event) => {
             if (longPressTriggeredRef.current) {
               event.preventDefault();
               longPressTriggeredRef.current = false;
               return;
             }
-            if (isMobile) onSessionSelect?.();
+            if (isMobile) onChatSelect?.();
           }}
           onContextMenu={(event) => {
             if (isMobile) event.preventDefault();
@@ -609,9 +589,6 @@ function SessionListItem({
           onTouchCancel={handleTouchEnd}
           className="flex items-center gap-1.5 pr-6"
         >
-          {isAgentActive && (
-            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-glow flex-shrink-0" />
-          )}
           <span className="truncate text-xs">{displayTitle}</span>
         </Link>
       )}
@@ -621,7 +598,7 @@ function SessionListItem({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              aria-label="Session actions"
+              aria-label="Chat actions"
               className={`h-5 w-5 items-center justify-center text-muted-foreground hover:text-foreground transition data-[state=open]:opacity-100 ${
                 isMobile
                   ? "pointer-events-none flex opacity-0"
@@ -639,7 +616,7 @@ function SessionListItem({
                 <DropdownMenuItem
                   onClick={() => {
                     setIsActionsOpen(false);
-                    onArchive(session.id);
+                    onArchive(chat.id);
                   }}
                   className="text-destructive focus:text-destructive"
                 >

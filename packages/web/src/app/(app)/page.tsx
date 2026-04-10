@@ -9,7 +9,7 @@ import type { SessionCategory } from "@open-inspect/shared";
 import { useSidebarContext } from "@/components/sidebar-layout";
 import { formatModelNameLower } from "@/lib/format";
 import { SHORTCUT_LABELS } from "@/lib/keyboard-shortcuts";
-import { SIDEBAR_SESSIONS_KEY } from "@/lib/session-list";
+import { SIDEBAR_CHATS_KEY } from "@/lib/session-list";
 import {
   DEFAULT_MODEL,
   getDefaultReasoningEffort,
@@ -64,9 +64,13 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
-  const sessionCreationPromise = useRef<Promise<string | null> | null>(null);
+  const sessionCreationPromise = useRef<Promise<{
+    chatId: string;
+    sessionId: string;
+  } | null> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingConfigRef = useRef<{ repo: string; model: string; branch: string } | null>(null);
   const [hasHydratedModelPreferences, setHasHydratedModelPreferences] = useState(false);
@@ -131,14 +135,16 @@ export default function Home() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    setPendingChatId(null);
     setPendingSessionId(null);
     setIsCreatingSession(false);
     sessionCreationPromise.current = null;
     pendingConfigRef.current = null;
   }, [selectedRepo, selectedModel, selectedBranch]);
 
-  const createSessionForWarming = useCallback(async () => {
-    if (pendingSessionId) return pendingSessionId;
+  const createChatForWarming = useCallback(async () => {
+    if (pendingChatId && pendingSessionId)
+      return { chatId: pendingChatId, sessionId: pendingSessionId };
     if (sessionCreationPromise.current) return sessionCreationPromise.current;
     if (!selectedRepo) return null;
 
@@ -152,7 +158,7 @@ export default function Home() {
 
     const promise = (async () => {
       try {
-        const res = await fetch("/api/sessions", {
+        const res = await fetch("/api/chats", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -162,6 +168,7 @@ export default function Home() {
             reasoningEffort,
             branch: selectedBranch || undefined,
             category,
+            prompt: "",
           }),
           signal: abortController.signal,
         });
@@ -173,8 +180,9 @@ export default function Home() {
             pendingConfigRef.current?.model === currentConfig.model &&
             pendingConfigRef.current?.branch === currentConfig.branch
           ) {
+            setPendingChatId(data.chatId);
             setPendingSessionId(data.sessionId);
-            return data.sessionId as string;
+            return { chatId: data.chatId as string, sessionId: data.sessionId as string };
           }
           return null;
         }
@@ -183,7 +191,7 @@ export default function Home() {
         if (error instanceof Error && error.name === "AbortError") {
           return null;
         }
-        console.error("Failed to create session for warming:", error);
+        console.error("Failed to create chat for warming:", error);
         return null;
       } finally {
         if (abortControllerRef.current === abortController) {
@@ -196,7 +204,15 @@ export default function Home() {
 
     sessionCreationPromise.current = promise;
     return promise;
-  }, [selectedRepo, selectedModel, reasoningEffort, selectedBranch, pendingSessionId, category]);
+  }, [
+    selectedRepo,
+    selectedModel,
+    reasoningEffort,
+    selectedBranch,
+    pendingChatId,
+    pendingSessionId,
+    category,
+  ]);
 
   useEffect(() => {
     if (!hasHydratedModelPreferences) return;
@@ -223,8 +239,8 @@ export default function Home() {
   const handlePromptChange = (value: string) => {
     const wasEmpty = prompt.length === 0;
     setPrompt(value);
-    if (wasEmpty && value.length > 0 && !pendingSessionId && !isCreatingSession && selectedRepo) {
-      createSessionForWarming();
+    if (wasEmpty && value.length > 0 && !pendingChatId && !isCreatingSession && selectedRepo) {
+      createChatForWarming();
     }
   };
 
@@ -240,18 +256,21 @@ export default function Home() {
     setError("");
 
     try {
-      let sessionId = pendingSessionId;
-      if (!sessionId) {
-        sessionId = await createSessionForWarming();
+      let ids =
+        pendingChatId && pendingSessionId
+          ? { chatId: pendingChatId, sessionId: pendingSessionId }
+          : null;
+      if (!ids) {
+        ids = await createChatForWarming();
       }
 
-      if (!sessionId) {
-        setError("Failed to create session");
+      if (!ids) {
+        setError("Failed to create chat");
         setCreating(false);
         return;
       }
 
-      const res = await fetch(`/api/sessions/${sessionId}/prompt`, {
+      const res = await fetch(`/api/sessions/${ids.sessionId}/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -262,20 +281,20 @@ export default function Home() {
       });
 
       if (res.ok) {
-        fetch(`/api/sessions/${sessionId}/generate-title`, {
+        fetch(`/api/chats/${ids.chatId}/generate-title`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
         }).catch(() => {});
-        mutate(SIDEBAR_SESSIONS_KEY);
-        router.push(`/session/${sessionId}`);
+        mutate(SIDEBAR_CHATS_KEY);
+        router.push(`/chat/${ids.chatId}`);
       } else {
         const data = await res.json();
         setError(data.error || "Failed to send prompt");
         setCreating(false);
       }
     } catch (_error) {
-      setError("Failed to create session");
+      setError("Failed to create chat");
       setCreating(false);
     }
   };

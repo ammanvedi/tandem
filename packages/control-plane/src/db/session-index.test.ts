@@ -18,6 +18,7 @@ type SessionRow = {
   tags: string;
   automation_id: string | null;
   automation_run_id: string | null;
+  chat_id: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -131,6 +132,7 @@ class FakeD1Database {
         tags,
         automationId,
         automationRunId,
+        chatId,
         createdAt,
         updatedAt,
       ] = args as [
@@ -147,6 +149,7 @@ class FakeD1Database {
         number,
         string,
         string,
+        string | null,
         string | null,
         string | null,
         number,
@@ -170,6 +173,7 @@ class FakeD1Database {
           tags,
           automation_id: automationId,
           automation_run_id: automationRunId,
+          chat_id: chatId,
           created_at: createdAt,
           updated_at: updatedAt,
         });
@@ -349,12 +353,12 @@ describe("SessionIndexStore", () => {
       const result = await store.get("test-id");
       expect(result).toEqual({
         ...session,
-        // Defaults applied for missing optional fields
         parentSessionId: null,
         spawnSource: "user",
         spawnDepth: 0,
         automationId: null,
         automationRunId: null,
+        chatId: null,
       });
     });
 

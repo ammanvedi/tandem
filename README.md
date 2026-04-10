@@ -246,3 +246,29 @@ TODO before presentation 0. fix empty dir problem
 
 3. start personal crm project
 4.
+
+IDEAS
+
+1. drag and drop onto the app iframe and have it added to the app
+2. store audio notes on the canvas as context also
+3. render posthog dashboards on canvas
+4. top level agent that can interact with sub agents and can update the canvas
+5. make the vnc view start chrome in full screen, add the agent browser skill to all agents and have
+   them load the dev server right when they start
+6. ensure we can drag and drop images onto the canvas
+7. as im outlining a feature an agent proactively suggests inspiration and analytics to view and
+   places options to add these on the canvas
+
+Notes for talk
+
+1. i find the text input quite constraining and too immediate
+
+Showing
+
+1. canvas as better input
+2. ability to add my own inspo and mark it up
+3. agent proactively suggesting inspo and analytics references and adding to canvas
+4. low resolution wireframe -> drag into app and it creates (most powerful for things that dont
+   exist yet)
+5. adjustment of low resolution twin
+6. docs twin and reflection

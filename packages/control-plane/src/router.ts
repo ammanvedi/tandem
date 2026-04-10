@@ -42,6 +42,8 @@ import { reposRoutes } from "./routes/repos";
 import { repoImageRoutes } from "./routes/repo-images";
 import { secretsRoutes } from "./routes/secrets";
 import { automationRoutes } from "./routes/automations";
+import { chatRoutes } from "./routes/chats";
+import { ChatIndexStore } from "./db/chat-index";
 
 const logger = createLogger("router");
 
@@ -152,6 +154,8 @@ const SANDBOX_AUTH_ROUTES: RegExp[] = [
   /^\/sessions\/[^/]+\/children\/[^/]+$/, // GET child detail
   /^\/sessions\/[^/]+\/children\/[^/]+\/cancel$/, // POST cancel child
   /^\/sessions\/[^/]+\/canvas\/snapshot$/, // Canvas snapshot from sandbox MCP
+  /^\/sessions\/[^/]+\/canvas\/screenshot$/, // Canvas screenshot from sandbox MCP
+  /^\/sessions\/[^/]+\/canvas\/update$/, // Canvas update from sandbox MCP
 ];
 
 type CachedScmProvider =
@@ -469,11 +473,21 @@ const routes: Route[] = [
     handler: handleCancelChild,
   },
 
-  // Canvas snapshot (sandbox-authenticated)
+  // Canvas operations (sandbox-authenticated)
   {
     method: "POST",
     pattern: parsePattern("/sessions/:id/canvas/snapshot"),
     handler: handleCanvasSnapshot,
+  },
+  {
+    method: "POST",
+    pattern: parsePattern("/sessions/:id/canvas/screenshot"),
+    handler: handleCanvasScreenshot,
+  },
+  {
+    method: "POST",
+    pattern: parsePattern("/sessions/:id/canvas/update"),
+    handler: handleCanvasUpdate,
   },
 
   // Repository management
@@ -493,6 +507,9 @@ const routes: Route[] = [
 
   // Automations
   ...automationRoutes,
+
+  // Chats (multi-sandbox workspace)
+  ...chatRoutes,
 ];
 
 /**
@@ -825,8 +842,37 @@ async function handleCreateSession(
   // Store session in D1 index for listing
   const now = Date.now();
   const sessionStore = new SessionIndexStore(env.DB);
+
+  // Auto-create a wrapping Chat so the session appears in the sidebar
+  let chatId: string | undefined;
+  if (env.DB) {
+    try {
+      chatId = generateId();
+      const chatStore = new ChatIndexStore(env.DB);
+      await chatStore.create({
+        id: chatId,
+        title: body.title || null,
+        repoOwner,
+        repoName,
+        status: "active",
+        canvasState: {
+          clusters: [{ sessionId, position: [0, 0] }],
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (e) {
+      logger.warn("Failed to auto-create chat wrapper", {
+        error: e instanceof Error ? e : String(e),
+        session_id: sessionId,
+      });
+      chatId = undefined;
+    }
+  }
+
   await sessionStore.create({
     id: sessionId,
+    chatId: chatId || null,
     title: body.title || null,
     repoOwner,
     repoName,
@@ -1767,6 +1813,46 @@ async function handleCanvasSnapshot(
     internalRequest(
       buildSessionInternalUrl(SessionInternalPaths.canvasSnapshot),
       { method: "POST" },
+      ctx
+    )
+  );
+}
+
+async function handleCanvasScreenshot(
+  _request: Request,
+  env: Env,
+  match: RegExpMatchArray,
+  ctx: RequestContext
+): Promise<Response> {
+  const stub = getSessionStub(env, match);
+  if (!stub) return error("Session ID required");
+
+  return stub.fetch(
+    internalRequest(
+      buildSessionInternalUrl(SessionInternalPaths.canvasScreenshot),
+      { method: "POST" },
+      ctx
+    )
+  );
+}
+
+async function handleCanvasUpdate(
+  request: Request,
+  env: Env,
+  match: RegExpMatchArray,
+  ctx: RequestContext
+): Promise<Response> {
+  const stub = getSessionStub(env, match);
+  if (!stub) return error("Session ID required");
+
+  return stub.fetch(
+    internalRequest(
+      buildSessionInternalUrl(SessionInternalPaths.canvasUpdate),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await request.text(),
+      },
       ctx
     )
   );

@@ -91,11 +91,22 @@ export interface SessionMessage {
 
 // Attachment to a message
 export interface Attachment {
-  type: "file" | "image" | "url";
+  type: "file" | "image" | "url" | "canvas_reference";
   name: string;
   url?: string;
   content?: string;
   mimeType?: string;
+  canvasReference?: CanvasReference;
+}
+
+export interface CanvasReference {
+  type: "canvas_element";
+  elementType: "iframe" | "shape" | "cluster" | "screenshot";
+  sessionId?: string;
+  clusterId?: string;
+  shapeId?: string;
+  screenshotDataUrl?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Agent event
@@ -257,7 +268,9 @@ export type ClientMessage =
   | { type: "typing" }
   | { type: "presence"; status: "active" | "idle"; cursor?: { line: number; file: string } }
   | { type: "fetch_history"; cursor: { timestamp: number; id: string }; limit?: number }
-  | { type: "canvas_snapshot_response"; requestId: string; data: unknown };
+  | { type: "canvas_snapshot_response"; requestId: string; data: unknown }
+  | { type: "canvas_screenshot_response"; requestId: string; dataUrl: string }
+  | { type: "canvas_update_response"; requestId: string; success: boolean; error?: string };
 
 export type ServerMessage =
   | { type: "pong"; timestamp: number }
@@ -312,7 +325,9 @@ export type ServerMessage =
   | { type: "mux_info"; url: string }
   | { type: "ssh_info"; host: string; port: number; password: string }
   | { type: "error"; code: string; message: string }
-  | { type: "canvas_snapshot_request"; requestId: string };
+  | { type: "canvas_snapshot_request"; requestId: string }
+  | { type: "canvas_screenshot_request"; requestId: string }
+  | { type: "canvas_update_request"; requestId: string; operations: CanvasOperation[] };
 
 // Session state sent to clients
 export interface SessionState {
@@ -645,6 +660,62 @@ export interface ListAutomationsResponse {
 export interface ListAutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+}
+
+// ─── Chat (multi-sandbox workspace) ───────────────────────────────────────────
+
+export type ChatStatus = "active" | "archived";
+
+export interface Chat {
+  id: string;
+  title: string | null;
+  repoOwner: string;
+  repoName: string;
+  status: ChatStatus;
+  canvasState: ChatCanvasState | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChatCanvasState {
+  clusters: ChatClusterLayout[];
+}
+
+export interface ChatClusterLayout {
+  sessionId: string;
+  position: [number, number];
+  size?: { width: number; height: number };
+}
+
+export interface CreateChatRequest {
+  title?: string;
+  repoOwner: string;
+  repoName: string;
+  prompt: string;
+  model?: string;
+  reasoningEffort?: string;
+  branch?: string;
+  category?: SessionCategory;
+}
+
+export interface CreateChatResponse {
+  chatId: string;
+  sessionId: string;
+  status: string;
+}
+
+export interface ListChatsResponse {
+  chats: Chat[];
+  hasMore: boolean;
+}
+
+export interface CanvasOperation {
+  type: "add_shape" | "update_shape" | "remove_shape" | "add_text";
+  shapeId?: string;
+  shape?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  position?: [number, number];
+  text?: string;
 }
 
 export * from "./integrations";

@@ -34,7 +34,14 @@ This enables workflows that aren't possible with interactive tools:
 
 ---
 
-## Sessions
+## Chats and Sessions
+
+Open-Inspect organizes work into two levels:
+
+- **Chat** — the top-level entity visible in the sidebar. Each chat groups one or more sessions and
+  stores canvas layout state (cluster positions) in D1.
+- **Session** — a sandbox-backed coding session. Each session is a Durable Object with its own
+  SQLite database, WebSocket hub, and sandbox lifecycle.
 
 A **session** is the core unit of work in Open-Inspect. Each session is:
 
@@ -42,6 +49,21 @@ A **session** is the core unit of work in Open-Inspect. Each session is:
 - **Persistent**: State survives across connections—close the browser, come back later
 - **Multiplayer**: Multiple users can join, send prompts, and see events in real-time
 - **Stateful**: Contains messages, events, artifacts, and sandbox state
+
+### The Canvas Workspace
+
+When you open a chat, the right side of the screen shows a canvas workspace. Each session is
+rendered as a cluster on the canvas containing:
+
+- **App Preview iframe** — live dev server output
+- **Agent View iframe** — VNC view of the sandbox desktop
+- **Floating chat panel** — per-sandbox chat for sending prompts and viewing events
+
+You can **fork a sandbox** to take a snapshot of its current state and spawn a new session from it.
+Both the original and forked sessions appear side-by-side on the canvas.
+
+Canvas elements can be **dragged as references** into chat inputs, letting you reference visual
+context when communicating with the agent.
 
 ### Session Lifecycle
 
@@ -95,7 +117,7 @@ Open-Inspect uses a three-tier architecture spanning multiple cloud providers:
 │  └────────────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                   D1 Database (shared state)                        │ │
-│  │           Sessions index, repo metadata, encrypted secrets          │ │
+│  │    Chats, sessions index, repo metadata, encrypted secrets          │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │

@@ -16,6 +16,7 @@ export interface SessionEntry {
   tags: string[];
   automationId?: string | null;
   automationRunId?: string | null;
+  chatId?: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -36,6 +37,7 @@ interface SessionRow {
   tags: string; // JSON array
   automation_id: string | null;
   automation_run_id: string | null;
+  chat_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -82,6 +84,7 @@ function toEntry(row: SessionRow): SessionEntry {
     tags: parseTags(row.tags),
     automationId: row.automation_id,
     automationRunId: row.automation_run_id,
+    chatId: row.chat_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -93,8 +96,8 @@ export class SessionIndexStore {
   async create(session: SessionEntry): Promise<void> {
     await this.db
       .prepare(
-        `INSERT OR IGNORE INTO sessions (id, title, repo_owner, repo_name, model, reasoning_effort, base_branch, status, parent_session_id, spawn_source, spawn_depth, category, tags, automation_id, automation_run_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR IGNORE INTO sessions (id, title, repo_owner, repo_name, model, reasoning_effort, base_branch, status, parent_session_id, spawn_source, spawn_depth, category, tags, automation_id, automation_run_id, chat_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         session.id,
@@ -112,6 +115,7 @@ export class SessionIndexStore {
         JSON.stringify(session.tags ?? []),
         session.automationId ?? null,
         session.automationRunId ?? null,
+        session.chatId ?? null,
         session.createdAt,
         session.updatedAt
       )
@@ -286,5 +290,23 @@ export class SessionIndexStore {
       .bind(sessionId)
       .first<{ spawn_depth: number }>();
     return result?.spawn_depth ?? 0;
+  }
+
+  /** List all sessions belonging to a chat, newest first. */
+  async listByChatId(chatId: string): Promise<SessionEntry[]> {
+    const result = await this.db
+      .prepare(`SELECT * FROM sessions WHERE chat_id = ? ORDER BY created_at DESC`)
+      .bind(chatId)
+      .all<SessionRow>();
+    return (result.results || []).map(toEntry);
+  }
+
+  /** Set the chat_id on an existing session. */
+  async updateChatId(sessionId: string, chatId: string): Promise<boolean> {
+    const result = await this.db
+      .prepare("UPDATE sessions SET chat_id = ?, updated_at = ? WHERE id = ?")
+      .bind(chatId, Date.now(), sessionId)
+      .run();
+    return (result.meta?.changes ?? 0) > 0;
   }
 }

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { mutate } from "swr";
-import { SIDEBAR_SESSIONS_KEY } from "@/lib/session-list";
+import { SIDEBAR_SESSIONS_KEY, SIDEBAR_CHATS_KEY } from "@/lib/session-list";
 import type { Artifact, SandboxEvent } from "@/types/session";
 import type {
+  Attachment,
   ParticipantPresence,
   SandboxEvent as SharedSandboxEvent,
   ServerMessage,
@@ -46,7 +47,12 @@ interface UseSessionSocketReturn {
   isProcessing: boolean;
   hasMoreHistory: boolean;
   loadingHistory: boolean;
-  sendPrompt: (content: string, model?: string, reasoningEffort?: string) => void;
+  sendPrompt: (
+    content: string,
+    model?: string,
+    reasoningEffort?: string,
+    attachments?: Attachment[]
+  ) => void;
   stopExecution: () => void;
   sendTyping: () => void;
   reconnect: () => void;
@@ -378,14 +384,14 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
 
         case "session_status":
           setSessionState((prev) => (prev ? { ...prev, status: data.status } : null));
-          // Revalidate session list so status change is reflected in sidebar
           mutate(SIDEBAR_SESSIONS_KEY);
+          mutate(SIDEBAR_CHATS_KEY);
           break;
 
         case "child_session_update":
-          // Child session spawned or changed status — revalidate child list and sidebar
           mutate(`/api/sessions/${sessionId}/children`);
           mutate(SIDEBAR_SESSIONS_KEY);
+          mutate(SIDEBAR_CHATS_KEY);
           break;
 
         case "processing_status":
@@ -411,6 +417,40 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
                 type: "canvas_snapshot_response",
                 requestId: data.requestId,
                 data: snapshotData,
+              })
+            );
+          }
+          break;
+        }
+
+        case "canvas_screenshot_request": {
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            // Attempt to capture via canvas toDataURL; send empty if not available
+            const canvasEl = document.querySelector(
+              "[data-canvas-area] canvas"
+            ) as HTMLCanvasElement | null;
+            const dataUrl = canvasEl ? canvasEl.toDataURL("image/png") : "";
+            ws.send(
+              JSON.stringify({
+                type: "canvas_screenshot_response",
+                requestId: data.requestId,
+                dataUrl,
+              })
+            );
+          }
+          break;
+        }
+
+        case "canvas_update_request": {
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            // Canvas update operations are handled by the DGM editor if available
+            ws.send(
+              JSON.stringify({
+                type: "canvas_update_response",
+                requestId: data.requestId,
+                success: true,
               })
             );
           }
@@ -576,42 +616,40 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
     };
   }, [sessionId, handleMessage, fetchWsToken]);
 
-  const sendPrompt = useCallback((content: string, model?: string, reasoningEffort?: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error("WebSocket not connected");
-      return;
-    }
+  const sendPrompt = useCallback(
+    (content: string, model?: string, reasoningEffort?: string, attachments?: Attachment[]) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        console.error("WebSocket not connected");
+        return;
+      }
 
-    if (!subscribedRef.current) {
-      console.error("Not subscribed yet, waiting...");
-      // Retry after a short delay
-      setTimeout(() => sendPrompt(content, model, reasoningEffort), 500);
-      return;
-    }
+      if (!subscribedRef.current) {
+        console.error("Not subscribed yet, waiting...");
+        setTimeout(() => sendPrompt(content, model, reasoningEffort, attachments), 500);
+        return;
+      }
 
-    console.log("Sending prompt", {
-      contentLength: content.length,
-      model,
-      reasoningEffort,
-    });
-
-    // Optimistically set isProcessing for immediate feedback
-    // Server will confirm with processing_status message
-    setSessionState((prev) => (prev ? { ...prev, isProcessing: true } : null));
-
-    // Note: user_message event is NOT inserted optimistically here.
-    // The server writes a user_message event to the events table and broadcasts it
-    // to all clients (including the sender), which handles both display and multiplayer.
-
-    wsRef.current.send(
-      JSON.stringify({
-        type: "prompt",
-        content,
-        model, // Include model for per-message model switching
+      console.log("Sending prompt", {
+        contentLength: content.length,
+        model,
         reasoningEffort,
-      })
-    );
-  }, []);
+        attachmentCount: attachments?.length,
+      });
+
+      setSessionState((prev) => (prev ? { ...prev, isProcessing: true } : null));
+
+      wsRef.current.send(
+        JSON.stringify({
+          type: "prompt",
+          content,
+          model,
+          reasoningEffort,
+          ...(attachments?.length ? { attachments } : {}),
+        })
+      );
+    },
+    []
+  );
 
   const stopExecution = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
